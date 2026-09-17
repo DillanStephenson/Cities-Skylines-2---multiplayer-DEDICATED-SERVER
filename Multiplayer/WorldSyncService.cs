@@ -4,6 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using Colossal;
 using Colossal.IO.AssetDatabase;
 using Colossal.Logging;
 using Colossal.PSI.Common;
@@ -441,10 +442,22 @@ namespace Multiplayer
             _nextAttemptMs = nowMs + RetryDelayMs;
             _note("Uploading the city (" + why + ")...");
             RefreshStatus();
-            RunUpload();
+
+            // The game serialises every save and load on its "SaveLoadGame" task queue (its own autosave, the
+            // menu, loading). Saving outside that queue can overlap the game's autosave and crash the serializer
+            // with a null reference, so the upload goes through the same queue.
+            try
+            {
+                TaskManager.instance.EnqueueTask("SaveLoadGame", UploadTask, 1);
+            }
+            catch (Exception ex)
+            {
+                _log.Warn("Could not queue the save with the game (" + ex.Message + "); saving directly");
+                UploadTask();
+            }
         }
 
-        private async void RunUpload()
+        private async Task UploadTask()
         {
             try
             {

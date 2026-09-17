@@ -55,7 +55,7 @@ Early access: play with people you know, keep your own saves, and report problem
 	<!--Link to the forum post where the mod can be discussed-->
 	<ForumLink Value="" />
 	<!--Version of the mod-->
-	<ModVersion Value="0.3.1" />
+	<ModVersion Value="0.3.2" />
 	<!--Recommended version of the base game to use the mod-->
 	<GameVersion Value="1.6.*" />
 	<!--Dependency for the mod, can be set multiple times-->
@@ -64,6 +64,7 @@ Early access: play with people you know, keep your own saves, and report problem
 	<RequiredDLC Value="" />
 	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
 	<ChangeLog>
+0.3.2: Saves to the server go through the game's own save queue. Saving outside it could collide with the game's autosave and throw a null reference in the serializer, which is what one player hit.
 0.3.1: Forced group sync. Options > Multiplayer > "Sync everyone every (minutes)" on the host: every so many minutes everyone stops behind a Syncing world box, the host's city goes up to the server and the others load it. The in-game panel has "Sync everyone now" for the host as well.
 0.3.0: Back to the replay method that never crashed: while another player's build lands, the selection tool is active for a moment and your own tool comes back right after (up to two seconds of waiting first, and every build queued meanwhile lands in the same go). The two newer methods from 0.2.7 to 0.2.9 are gone; they left ghosts on screen until the next click and are the prime suspects for the crashes. Source of truth: the host (else the longest-connected player) holds the true city. When your game cannot recreate three of the others' builds within two minutes it has drifted; it then asks the host for a fresh save and loads it on its own, and stops replaying until it has.
 0.2.9: Power cables and other nets built by another player now join the network on your side even when the exact junction they snapped to is not there: the piece attaches to the node or edge under that point instead of ending loose (loose cable ends carried no power, which is why electricity could work on one PC and not the other). Remote builds land without pausing your tool system (which could take the game down): your tool's own preview is simply held back for the few frames a build takes. The toolbar still keeps its selection.
