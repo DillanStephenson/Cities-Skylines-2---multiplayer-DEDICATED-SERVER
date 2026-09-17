@@ -41,7 +41,7 @@ Early access: play with people you know, keep regular saves, and report problems
 	<RequiredDLC Value="" />
 	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
 	<ChangeLog>
-0.2.5: Traffic Tool Essentials settings now follow the player who changes them (junction signals, phases, lane groups, lane directions, labels, sync groups, depot zones). A player is told when their build could not be recreated on someone else's PC. Server console no longer logs every player-position update.
+0.2.5: Traffic Tool Essentials settings now follow the player who changes them (junction signals, phases, lane groups, lane directions, labels, sync groups, depot zones). New city button on the Join screen: the host starts a fresh city on any map and it replaces the one on the server. A player is told when their build could not be recreated on someone else's PC. Connections survive 30 s of silence; the server window no longer freezes when clicked; its console no longer logs every player-position update.
 0.2.4: the mod's own Paradox entry no longer counts in mod-list checks (subscribers were seen as having an extra mod). Dedicated servers now read all settings from server.json and reload it live.
 0.2.3: first published build. Server window, shared city, live build sync (roads, buildings, zoning, terrain, transit lines), city settings and building options sync, shared treasury, player markers on the map, anyone can save, menu screens, in-game panel, playset-aware mod check, server update check.
 	</ChangeLog>
