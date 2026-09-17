@@ -61,8 +61,9 @@ namespace Multiplayer
             // Main-menu entry and Join / Host screens (Multiplayer.mjs next to this DLL talks to these bindings).
             updateSystem.UpdateAt<MultiplayerUISystem>(SystemUpdatePhase.UIUpdate);
 
-            // Where everyone is: sent after the camera settles, drawn with the tool overlay renderer.
+            // Where everyone is, and what their tool is showing: sent a few times a second, drawn with the tool overlay renderer.
             updateSystem.UpdateAt<Sync.PresenceSystem>(SystemUpdatePhase.UIUpdate);
+            updateSystem.UpdateAt<Sync.PreviewCaptureSystem>(SystemUpdatePhase.UIUpdate);
             updateSystem.UpdateAt<Sync.PresenceRenderSystem>(SystemUpdatePhase.Rendering);
 
             DevTriggers.Apply(Service, Settings);

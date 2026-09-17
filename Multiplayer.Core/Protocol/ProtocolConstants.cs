@@ -10,7 +10,7 @@ namespace Multiplayer.Core.Protocol
         public const int ProtocolVersion = 3;
 
         /// <summary>Mod version advertised in the handshake. Keep in step with PublishConfiguration.xml.</summary>
-        public const string ModVersion = "0.2.6";
+        public const string ModVersion = "0.2.7";
 
         /// <summary>This mod's id on Paradox Mods. Entries with this id are never part of a required-mod comparison: everyone in a session has it.</summary>
         public const int ParadoxModId = 159499;

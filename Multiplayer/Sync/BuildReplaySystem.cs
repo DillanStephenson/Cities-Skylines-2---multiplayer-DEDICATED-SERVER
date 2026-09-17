@@ -32,8 +32,6 @@ namespace Multiplayer.Sync
             Applied,
         }
 
-        /// <summary>How long a queued command waits for the player to leave their tool before it is borrowed.</summary>
-        private const int HijackAfterFrames = 90;
 
         private static readonly MethodInfo ApplyModeSetter = typeof(ToolBaseSystem).GetProperty("applyMode", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetSetMethod(true);
 
@@ -51,9 +49,8 @@ namespace Multiplayer.Sync
 
         private Phase m_Phase = Phase.Idle;
         private QueuedBuild m_Current;
-        private int m_WaitedFrames;
-        private ToolBaseSystem m_SavedTool;
-        private PrefabBase m_SavedPrefab;
+        /// <summary>The player's tool, paused (not switched away) for the few frames a remote build takes to land.</summary>
+        private ToolBaseSystem m_FrozenTool;
         private int m_InjectedCount;
         private int m_Batched;
         private string m_Problem;
@@ -62,6 +59,9 @@ namespace Multiplayer.Sync
         private readonly List<Entity> m_Injected = new List<Entity>();
 
         public int QueueLength => m_Queue.Count;
+
+        /// <summary>True while another player's build is being realised here (its temps are not the local player's preview).</summary>
+        public bool IsApplying => m_Phase != Phase.Idle || m_FrozenTool != null;
 
         public int ReplayedCount => m_Replayed;
 
@@ -82,6 +82,10 @@ namespace Multiplayer.Sync
         public void Clear()
         {
             m_Queue.Clear();
+            if (m_Phase == Phase.Idle)
+            {
+                ReleaseTool();
+            }
         }
 
         protected override void OnCreate()
@@ -120,14 +124,14 @@ namespace Multiplayer.Sync
                         return;
                     }
 
-                    if (!EnsureDefaultTool())
+                    if (!PrepareTool())
                     {
                         return;
                     }
 
                     if (!m_TempQuery.IsEmptyIgnoreFilter)
                     {
-                        // Something still previewing (the borrowed tool's last frame, usually): clear it first.
+                        // The player's preview is still there (their tool ran before it was paused): clear it first.
                         SetApplyMode(ApplyMode.Clear);
                         m_Phase = Phase.WaitingForClear;
                         return;
@@ -238,25 +242,67 @@ namespace Multiplayer.Sync
         }
 
         /// <summary>True when the default tool is active. Otherwise waits a little for the player, then borrows the tool.</summary>
-        private bool EnsureDefaultTool()
+        /// <summary>
+        /// Gets the tool pipeline ready for our definitions without changing the player's tool selection: the
+        /// active tool is paused (its system disabled) so it stops producing its own preview for the few frames
+        /// the remote build takes, and its apply mode is what the output system reads. Switching tools instead
+        /// would reset the toolbar every time someone else placed something.
+        /// </summary>
+        private bool PrepareTool()
         {
-            if (m_ToolSystem.activeTool == m_DefaultTool)
-            {
-                m_WaitedFrames = 0;
-                return true;
-            }
-
-            if (++m_WaitedFrames < HijackAfterFrames)
+            ToolBaseSystem active = m_ToolSystem.activeTool;
+            if (active == null)
             {
                 return false;
             }
 
-            m_SavedTool = m_ToolSystem.activeTool;
-            m_SavedPrefab = m_ToolSystem.activePrefab;
-            m_ToolSystem.activeTool = m_DefaultTool;
-            Mod.log.Info("Borrowing the tool for a moment to apply " + m_Queue.Count + " queued build(s)");
-            m_WaitedFrames = 0;
-            return false;
+            if (m_FrozenTool != null && m_FrozenTool != active)
+            {
+                // The player switched tools while one was paused: let the old one go and deal with the new one.
+                m_FrozenTool.Enabled = true;
+                m_FrozenTool = null;
+            }
+
+            if (active == m_DefaultTool || m_FrozenTool == active)
+            {
+                return true;
+            }
+
+            if (m_ToolSystem.applyMode == ApplyMode.Apply)
+            {
+                // The player is placing something this very frame; let that land first.
+                return false;
+            }
+
+            m_FrozenTool = active;
+            m_FrozenTool.Enabled = false;
+            return true;
+        }
+
+        private void ReleaseTool()
+        {
+            if (m_FrozenTool == null)
+            {
+                return;
+            }
+
+            try
+            {
+                SetApplyMode(ApplyMode.None);
+            }
+            catch (Exception)
+            {
+                // The setter is checked at creation; nothing else to do here.
+            }
+
+            m_FrozenTool.Enabled = true;
+            m_FrozenTool = null;
+        }
+
+        protected override void OnDestroy()
+        {
+            ReleaseTool();
+            base.OnDestroy();
         }
 
         /// <summary>Terraforming strokes only: independent of each other, so several can be applied in one frame.</summary>
@@ -379,29 +425,17 @@ namespace Multiplayer.Sync
             m_Current = null;
             if (m_Queue.Count > 0)
             {
-                // Keep the borrowed tool until the queue drains.
+                // Keep the tool paused until the queue drains.
                 return;
             }
 
-            if (m_SavedTool != null)
-            {
-                if (m_SavedPrefab != null)
-                {
-                    m_ToolSystem.ActivatePrefabTool(m_SavedPrefab);
-                }
-                else
-                {
-                    m_ToolSystem.activeTool = m_SavedTool;
-                }
-
-                m_SavedTool = null;
-                m_SavedPrefab = null;
-            }
+            ReleaseTool();
         }
 
         private void SetApplyMode(ApplyMode mode)
         {
-            ApplyModeSetter.Invoke(m_DefaultTool, new object[] { mode });
+            ToolBaseSystem tool = m_ToolSystem.activeTool ?? m_DefaultTool;
+            ApplyModeSetter.Invoke(tool, new object[] { mode });
         }
     }
 }

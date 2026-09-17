@@ -5,6 +5,7 @@ using Game;
 using Game.Rendering;
 using Game.SceneFlow;
 using Game.Simulation;
+using Multiplayer.Core.Build;
 using Multiplayer.Core.Session;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -40,7 +41,8 @@ namespace Multiplayer.Sync
             }
 
             List<RemotePresence> players = PresenceStore.Snapshot(service.NowMs);
-            if (players.Count == 0)
+            List<RemotePreview> previews = PreviewStore.Snapshot(service.NowMs);
+            if (players.Count == 0 && previews.Count == 0)
             {
                 return;
             }
@@ -48,6 +50,36 @@ namespace Multiplayer.Sync
             OverlayRenderSystem.Buffer buffer = m_Overlay.GetBuffer(out JobHandle dependencies);
             dependencies.Complete();
             TerrainHeightData heights = m_Terrain.GetHeightData();
+
+            // What the others are about to place: their tool's ghost, in their colour.
+            foreach (RemotePreview remote in previews)
+            {
+                Color color = PresenceStore.ColorFor(remote.PlayerId);
+                var fill = new Color(color.r, color.g, color.b, 0.35f);
+                var deleting = new Color(1f, 0.25f, 0.2f, 0.45f);
+                PreviewCommand preview = remote.Preview;
+                foreach (PreviewCurve curve in preview.Curves)
+                {
+                    var bezier = new Bezier4x3(EntityResolver.ToFloat3(curve.A), EntityResolver.ToFloat3(curve.B), EntityResolver.ToFloat3(curve.C), EntityResolver.ToFloat3(curve.D));
+                    buffer.DrawCurve(color, curve.Deleting ? deleting : fill, 1f, OverlayRenderSystem.StyleFlags.Projected, bezier, math.clamp(curve.Width, 2f, 60f));
+                }
+
+                foreach (PreviewPoint point in preview.Points)
+                {
+                    float3 position = OnGround(ref heights, EntityResolver.ToFloat3(point.Position));
+                    buffer.DrawCircle(color, point.Deleting ? deleting : fill, 1f, OverlayRenderSystem.StyleFlags.Projected, new float2(0f, 1f), position, math.clamp(point.Radius * 2f, 4f, 200f));
+                }
+
+                foreach (PreviewLoop loop in preview.Loops)
+                {
+                    for (int n = 0; n < loop.Nodes.Count; n++)
+                    {
+                        float3 from = OnGround(ref heights, EntityResolver.ToFloat3(loop.Nodes[n]));
+                        float3 to = OnGround(ref heights, EntityResolver.ToFloat3(loop.Nodes[(n + 1) % loop.Nodes.Count]));
+                        buffer.DrawLine(color, new Line3.Segment(from, to), 2f);
+                    }
+                }
+            }
 
             foreach (RemotePresence player in players)
             {

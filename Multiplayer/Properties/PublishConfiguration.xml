@@ -32,7 +32,7 @@ Early access: play with people you know, keep regular saves, and report problems
 	<!--Link to the forum post where the mod can be discussed-->
 	<ForumLink Value="" />
 	<!--Version of the mod-->
-	<ModVersion Value="0.2.6" />
+	<ModVersion Value="0.2.7" />
 	<!--Recommended version of the base game to use the mod-->
 	<GameVersion Value="1.6.*" />
 	<!--Dependency for the mod, can be set multiple times-->
@@ -41,6 +41,7 @@ Early access: play with people you know, keep regular saves, and report problems
 	<RequiredDLC Value="" />
 	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
 	<ChangeLog>
+0.2.7: You now see what the others are placing before they place it: the road they drag out, the building under their cursor, the area they draw, as a ghost in their colour. Other players' builds no longer reset your toolbar when they land: your tool is paused for a few frames instead of being switched away.
 0.2.6: The Traffic mod's lane connections and priority signs now follow whoever changes them. Fixes other players' games crashing when someone places a farm, forestry, mining or oil area: those areas are no longer sent live and arrive with the next save instead. When the host connects and the server already holds a city, the game asks whether to load it or start a new world (map list opens, mod maps included). Fetching the server's city on purpose no longer re-uploads it as a new one.
 0.2.5: Traffic Tool Essentials settings now follow the player who changes them (junction signals, phases, lane groups, lane directions, labels, sync groups, depot zones). New city button on the Join screen: the host starts a fresh city on any map and it replaces the one on the server. A player is told when their build could not be recreated on someone else's PC. Connections survive 30 s of silence; the server window no longer freezes when clicked; its console no longer logs every player-position update.
 0.2.4: the mod's own Paradox entry no longer counts in mod-list checks (subscribers were seen as having an extra mod). Dedicated servers now read all settings from server.json and reload it live.

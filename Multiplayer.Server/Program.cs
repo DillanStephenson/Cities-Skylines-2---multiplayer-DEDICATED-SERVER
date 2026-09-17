@@ -146,9 +146,9 @@ namespace Multiplayer.Server
             session.SimulationSpeedChanged += (speed, p) => view.Append("speed " + ConsoleView.FormatSpeed(speed) + (p != null ? " requested by " + p.Name : " set from console"), ConsoleColor.Cyan);
             session.GameplayCommandRelayed += c =>
             {
-                if (c.Kind == Multiplayer.Core.Build.PresenceCommand.Kind)
+                if (c.Kind == Multiplayer.Core.Build.PresenceCommand.Kind || c.Kind == Multiplayer.Core.Build.PreviewCommand.Kind)
                 {
-                    // Several a second per player while they pan about; not worth a line each.
+                    // Several a second per player while they pan about or drag a road out; not worth a line each.
                     return;
                 }
 

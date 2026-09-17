@@ -76,6 +76,7 @@ namespace Multiplayer
             Session.PlayerJoined += player => Note(player + " joined");
             Session.PlayerLeft += (player, reason) => Note(player + " left (" + reason + ")");
             Session.PlayerLeft += (player, reason) => Sync.PresenceStore.Remove(player.PlayerId);
+            Session.PlayerLeft += (player, reason) => Sync.PreviewStore.Remove(player.PlayerId);
             Session.ChatReceived += (player, text) => Note(player.Name + ": " + text);
             Session.SimulationSpeedReceived += speed => _pendingSpeed = speed;
             Session.GameplayCommandReceived += OnGameplayCommand;
@@ -160,6 +161,12 @@ namespace Multiplayer
             _log.Info("Sent mod data: " + command + " (" + bytes.Length + " bytes, " + command.Entities.Count + " entity refs)");
         }
 
+        /// <summary>Called by the preview capture a few times a second with what the local player's tool is showing.</summary>
+        public void SendPreview(PreviewCommand command)
+        {
+            Session.SendGameplayCommand(PreviewCommand.Kind, command.ToBytes());
+        }
+
         /// <summary>Called by the lane connection sync with a junction's Traffic lane connections the local player changed.</summary>
         public void SendLaneConnections(LaneConnectionsCommand command)
         {
@@ -191,6 +198,20 @@ namespace Multiplayer
 
         private void OnGameplayCommand(GameplayCommandMessage message)
         {
+            if (message.Kind == PreviewCommand.Kind)
+            {
+                try
+                {
+                    Sync.PreviewStore.Receive(message.OriginPlayerId, PreviewCommand.FromBytes(message.Payload), Now);
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn("Bad preview from player " + message.OriginPlayerId + ": " + ex.Message);
+                }
+
+                return;
+            }
+
             if (message.Kind == ModDataCommand.Kind)
             {
                 try
