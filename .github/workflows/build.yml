@@ -1,0 +1,52 @@
+name: Build
+
+# The mod itself needs the game's modding toolchain, so CI covers what runs anywhere: the networking
+# core, its tests, the console client and the server window. Tagging v* publishes server binaries.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Test the networking core
+        run: dotnet test Multiplayer.Tests/Multiplayer.Tests.csproj --nologo -v minimal
+      - name: Build the server window and the console client
+        run: |
+          dotnet build Multiplayer.Server/Multiplayer.Server.csproj -f net8.0 --nologo -v minimal
+          dotnet build Multiplayer.SmokeClient/Multiplayer.SmokeClient.csproj --nologo -v minimal
+
+  release:
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        rid: [linux-x64, win-x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Publish the server window (${{ matrix.rid }})
+        run: |
+          dotnet publish Multiplayer.Server/Multiplayer.Server.csproj -f net8.0 -r ${{ matrix.rid }} --self-contained \
+            -p:PublishSingleFile=true -p:DebugType=none -o out/${{ matrix.rid }} --nologo -v minimal
+          cp deploy/vps/README.md out/${{ matrix.rid }}/README-linux.md
+          cp deploy/vps/setup-vps.sh deploy/vps/cs2-multiplayer.service out/${{ matrix.rid }}/
+          cd out/${{ matrix.rid }} && zip -r ../cs2-multiplayer-server-${{ matrix.rid }}-${{ github.ref_name }}.zip .
+      - name: Attach to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/cs2-multiplayer-server-${{ matrix.rid }}-${{ github.ref_name }}.zip
+          generate_release_notes: true

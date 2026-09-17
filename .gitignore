@@ -1,0 +1,22 @@
+# Build output
+bin/
+obj/
+out/
+*.user
+*.suo
+.vs/
+.idea/
+
+# UI bundle (rebuilt by the C# build; the game-deployed copy lives outside the repo)
+Multiplayer.UI/node_modules/
+Multiplayer.UI/build/
+
+# Local scratch
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Never commit server secrets: passwords and owner keys live in the environment (see deploy/vps/README.md)
+*.secrets
+*secrets*.txt

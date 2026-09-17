@@ -1,0 +1,150 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<Configurations>Debug;Release</Configurations>
+	
+		<!--The file where mod information which is required for publishing mod on PDX mods are stored-->
+		<PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
+	</PropertyGroup>
+	
+	<!--Imports must be after PropertyGroup block-->
+	<Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.props" />
+	<Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.targets" />
+
+	<ItemGroup>
+		<Reference Include="Game">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.Core">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.Logging">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.IO.AssetDatabase">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.UI">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.UI.Binding">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.Localization">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.PSI.Common">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.IO">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.AssetPipeline">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Newtonsoft.Json">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.Mathematics">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Unity.InputSystem">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="UnityEngine.CoreModule">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Unity.Burst">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Unity.Collections">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Unity.Entities">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Unity.Mathematics">
+			<Private>false</Private>
+		</Reference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Reference Update="System">
+			<Private>false</Private>
+		</Reference>
+		<Reference Update="System.Core">
+			<Private>false</Private>
+		</Reference>
+		<Reference Update="System.Data">
+			<Private>false</Private>
+		</Reference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="$(ModPropsFile)" Link="Properties\Mod.props" />
+		<None Include="$(ModTargetsFile)" Link="Properties\Mod.targets" />
+	</ItemGroup>
+
+	<!--
+	  The networking core (Multiplayer.Core) is compiled straight into this assembly so the game
+	  loads one DLL and nothing needs merging. The same sources are unit-tested via Multiplayer.Tests.
+	-->
+	<ItemGroup>
+		<Compile Include="..\Multiplayer.Core\**\*.cs" Exclude="..\Multiplayer.Core\obj\**;..\Multiplayer.Core\bin\**" Link="Core\%(RecursiveDir)%(Filename)%(Extension)" />
+	</ItemGroup>
+
+	<!--
+	  The server window (Multiplayer.Server.exe, net48 so it needs nothing installed) is built and copied
+	  into the output folder before the toolchain deploys it, so it ships next to the mod DLL and the mod
+	  can spawn it when the player clicks Host. Runs after the post-processor, before DeployWIP.
+	-->
+	<Target Name="BundleServerWindow" AfterTargets="RunModPostProcessor" BeforeTargets="DeployWIP" Condition="'$(NeedBuild)'">
+		<MSBuild Projects="..\Multiplayer.Server\Multiplayer.Server.csproj" Targets="Restore;Build" Properties="TargetFramework=net48;Configuration=$(Configuration)" />
+		<ItemGroup>
+			<ServerWindowFiles Include="..\Multiplayer.Server\bin\$(Configuration)\net48\Multiplayer.Server.exe;..\Multiplayer.Server\bin\$(Configuration)\net48\Multiplayer.Server.exe.config;..\Multiplayer.Server\bin\$(Configuration)\net48\Multiplayer.Server.pdb" />
+		</ItemGroup>
+		<Error Condition="!Exists('..\Multiplayer.Server\bin\$(Configuration)\net48\Multiplayer.Server.exe')" Text="Server window did not build: ..\Multiplayer.Server\bin\$(Configuration)\net48\Multiplayer.Server.exe is missing" />
+		<Copy SourceFiles="@(ServerWindowFiles)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+		<Message Text="Bundled server window into $(OutDir)" Importance="high" />
+	</Target>
+
+	<!--
+	  The menu UI (Multiplayer.UI, a React bundle built with the game's own UI mod template) is compiled with
+	  npm and copied next to the DLL as Multiplayer.mjs (+ .css), which the game loads as a UI module.
+	  Skipped when node_modules is missing (run "npm install" in Multiplayer.UI once), so a plain C# build
+	  still works; the previous bundle in the output folder is kept in that case.
+	-->
+	<Target Name="BundleUiModule" AfterTargets="RunModPostProcessor" BeforeTargets="DeployWIP" Condition="'$(NeedBuild)' And Exists('..\Multiplayer.UI\node_modules') And '$(SkipUiBuild)' != 'true'">
+		<Exec Command="npm run build" WorkingDirectory="..\Multiplayer.UI" />
+		<Error Condition="!Exists('..\Multiplayer.UI\build\Multiplayer.mjs')" Text="UI bundle did not build: ..\Multiplayer.UI\build\Multiplayer.mjs is missing" />
+		<Copy SourceFiles="..\Multiplayer.UI\build\Multiplayer.mjs" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+		<Copy SourceFiles="..\Multiplayer.UI\build\Multiplayer.css" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('..\Multiplayer.UI\build\Multiplayer.css')" />
+		<Message Text="Bundled UI module into $(OutDir)" Importance="high" />
+	</Target>
+
+	<!--
+	  Local build fix: the game's ModPostProcessor.exe targets .NET 6, which is not installed here.
+	  Redefining this target after the Mod.targets import prefixes the command with a roll-forward
+	  so the tool runs on the newest installed .NET runtime. BeforeTargets keeps it ahead of RunModPostProcessor.
+	  Delete this block if the .NET 6 runtime gets installed.
+	-->
+	<Target Name="ModPostProcessorConfig" AfterTargets="AfterBuild" BeforeTargets="RunModPostProcessor" Condition="'$(NeedBuild)'">
+		<PropertyGroup>
+			<ModPostProcessorArgs>set DOTNET_ROLL_FORWARD=LatestMajor&amp;&amp; "$(ModPostProcessorFullPath)" PostProcess "$(TargetPath)" -u "$(UnityModProjectFullPath)" @(ReferencePath->'-r "%(Identity)"', ' ') -p Windows -p macOS -p Linux -d -v</ModPostProcessorArgs>
+		</PropertyGroup>
+	</Target>
+
+	<!--
+	  Same fix for the Paradox Mods publisher (ModPublisher.exe also targets .NET 6). Publishing:
+	    dotnet publish Multiplayer/Multiplayer.csproj -c Release -p:PublishProfile=PublishNewMod      (first time)
+	    dotnet publish Multiplayer/Multiplayer.csproj -c Release -p:PublishProfile=PublishNewVersion  (new build)
+	    dotnet publish Multiplayer/Multiplayer.csproj -c Release -p:PublishProfile=UpdatePublishedConfiguration  (text/images only)
+	  The content that goes up is the deployed mod folder: DLL, UI bundle, bundled server window.
+	-->
+	<Target Name="CustomModPublisherConfig" AfterTargets="ModPublisherConfig" BeforeTargets="RunModPublisher">
+		<PropertyGroup>
+			<ModPublisherArgs>set DOTNET_ROLL_FORWARD=LatestMajor&amp;&amp; $(ModPublisherArgs)</ModPublisherArgs>
+		</PropertyGroup>
+	</Target>
+
+</Project>

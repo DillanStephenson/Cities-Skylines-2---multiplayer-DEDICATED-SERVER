@@ -1,0 +1,334 @@
+// Sizes are in the game's scaled rem units (about one pixel at 1080p).
+
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding: 20rem 0 40rem;
+}
+
+// ---------------------------------------------------------------- choice cards
+
+.cards {
+  display: flex;
+  justify-content: center;
+  gap: 40rem;
+  width: 100%;
+}
+
+.card {
+  width: 560rem;
+  height: 440rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8rem;
+  background-color: rgba(6, 26, 64, 0.85);
+  border: 2rem solid rgba(157, 193, 222, 0.12);
+  transition: background-color 120ms linear, border-color 120ms linear;
+
+  &:hover,
+  &:focus {
+    background-color: rgba(12, 44, 100, 0.95);
+    border-color: rgba(157, 193, 222, 0.45);
+  }
+}
+
+.cardIconFrame {
+  width: 220rem;
+  height: 220rem;
+  border-radius: 50%;
+  border: 2rem solid rgba(157, 193, 222, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 34rem;
+}
+
+.cardIcon {
+  width: 100rem;
+  height: 100rem;
+  opacity: 0.75;
+}
+
+.cardLabel {
+  font-size: 40rem;
+  letter-spacing: 3rem;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.cardHint {
+  margin-top: 14rem;
+  padding: 0 40rem;
+  font-size: 15rem;
+  text-align: center;
+  color: rgba(157, 193, 222, 0.8);
+}
+
+// ---------------------------------------------------------------- forms
+
+.panel {
+  width: 900rem;
+  padding: 26rem 30rem;
+  border-radius: 8rem;
+  background-color: rgba(6, 26, 64, 0.85);
+  border: 2rem solid rgba(157, 193, 222, 0.12);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 14rem;
+}
+
+.label {
+  width: 200rem;
+  font-size: 15rem;
+  letter-spacing: 1rem;
+  text-transform: uppercase;
+  color: rgba(157, 193, 222, 0.9);
+}
+
+.input {
+  flex: 1;
+  height: 42rem;
+  padding: 0 14rem;
+  font-size: 18rem;
+  color: #ffffff;
+  background-color: rgba(0, 0, 0, 0.4);
+  border: 1rem solid rgba(157, 193, 222, 0.35);
+  border-radius: 4rem;
+
+  &:focus {
+    border-color: #72c8f0;
+  }
+}
+
+.note {
+  margin: 6rem 0 18rem;
+  font-size: 15rem;
+  line-height: 21rem;
+  color: rgba(157, 193, 222, 0.8);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12rem;
+}
+
+.button {
+  min-width: 180rem;
+  padding: 10rem 24rem;
+  font-size: 18rem;
+  text-transform: uppercase;
+}
+
+// ---------------------------------------------------------------- status
+
+.status {
+  width: 900rem;
+  margin-top: 20rem;
+  padding: 20rem 30rem;
+  border-radius: 8rem;
+  background-color: rgba(0, 0, 0, 0.45);
+  border: 1rem solid rgba(157, 193, 222, 0.2);
+}
+
+.statusRow {
+  display: flex;
+  margin-bottom: 8rem;
+  font-size: 16rem;
+}
+
+.statusKey {
+  width: 200rem;
+  letter-spacing: 1rem;
+  text-transform: uppercase;
+  color: rgba(157, 193, 222, 0.9);
+}
+
+.statusValue {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.statusOnline {
+  flex: 1;
+  color: #7ee0a3;
+}
+
+.error {
+  margin: 4rem 0 10rem;
+  font-size: 16rem;
+  color: #ff8a80;
+}
+
+.log {
+  margin-top: 10rem;
+  padding-top: 10rem;
+  border-top: 1rem solid rgba(157, 193, 222, 0.2);
+  font-size: 14rem;
+  line-height: 20rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+// ---------------------------------------------------------------- in-game toolbar button and panel
+
+.gameToggle {
+  position: relative;
+  width: 36rem;
+  height: 36rem;
+  margin: 0;
+  padding: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(6, 26, 64, 0.85);
+  border: 2rem solid rgba(157, 193, 222, 0.25);
+
+  &:hover {
+    background-color: rgba(12, 44, 100, 0.95);
+    border-color: rgba(157, 193, 222, 0.6);
+  }
+}
+
+.gameToggleOpen {
+  background-color: rgba(12, 44, 100, 0.95);
+  border-color: #72c8f0;
+}
+
+.gameToggleIcon {
+  width: 22rem;
+  height: 22rem;
+  opacity: 0.9;
+}
+
+.gameDot {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 9rem;
+  height: 9rem;
+  border-radius: 50%;
+  background-color: #7ee0a3;
+  border: 1rem solid rgba(0, 0, 0, 0.5);
+}
+
+.gamePanel {
+  position: absolute;
+  right: 20rem;
+  bottom: 110rem;
+  width: 440rem;
+  padding: 14rem 18rem 16rem;
+  border-radius: 8rem;
+  background-color: rgba(6, 26, 64, 0.94);
+  border: 2rem solid rgba(157, 193, 222, 0.22);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.gamePanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10rem;
+}
+
+.gamePanelTitle {
+  font-size: 18rem;
+  letter-spacing: 2rem;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.gameClose {
+  width: 28rem;
+  height: 28rem;
+}
+
+.gameCloseIcon {
+  width: 16rem;
+  height: 16rem;
+}
+
+.gameRow {
+  display: flex;
+  margin-bottom: 6rem;
+  font-size: 14rem;
+}
+
+.gameKey {
+  width: 110rem;
+  letter-spacing: 1rem;
+  text-transform: uppercase;
+  color: rgba(157, 193, 222, 0.9);
+}
+
+.gameTransfer {
+  margin: 4rem 0 6rem;
+  font-size: 14rem;
+  color: #72c8f0;
+}
+
+.gameLog {
+  margin: 8rem 0;
+  padding-top: 8rem;
+  border-top: 1rem solid rgba(157, 193, 222, 0.2);
+  font-size: 12rem;
+  line-height: 17rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.gameActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8rem;
+  margin-top: 10rem;
+}
+
+.gameButton {
+  padding: 8rem 16rem;
+  font-size: 14rem;
+  text-transform: uppercase;
+}
+
+.gameButtonQuiet {
+  padding: 8rem 16rem;
+  font-size: 14rem;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+  border: 1rem solid rgba(157, 193, 222, 0.35);
+  border-radius: 4rem;
+}
+
+.gameHint {
+  margin-top: 10rem;
+  font-size: 13rem;
+  line-height: 18rem;
+  color: rgba(157, 193, 222, 0.8);
+}
+
+// ---------------------------------------------------------------- fallback frame
+
+.fallbackHeader {
+  display: flex;
+  align-items: center;
+  gap: 16rem;
+  padding: 20rem 40rem;
+}
+
+.fallbackBackIcon {
+  width: 28rem;
+  height: 28rem;
+}
+
+.fallbackTitle {
+  font-size: 34rem;
+  letter-spacing: 3rem;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+}

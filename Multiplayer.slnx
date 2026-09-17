@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="Multiplayer/Multiplayer.csproj" />
+  <Project Path="Multiplayer.Core/Multiplayer.Core.csproj" />
+  <Project Path="Multiplayer.Server/Multiplayer.Server.csproj" />
+  <Project Path="Multiplayer.Tests/Multiplayer.Tests.csproj" />
+  <Project Path="Multiplayer.SmokeClient/Multiplayer.SmokeClient.csproj" />
+</Solution>

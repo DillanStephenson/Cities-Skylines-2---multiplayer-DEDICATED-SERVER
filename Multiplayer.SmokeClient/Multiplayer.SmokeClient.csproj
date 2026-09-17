@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+	  Console client that joins a running host using the same core the mod uses.
+	  Lets one PC verify host/join against the real game without a second game install:
+	    dotnet run - -address 127.0.0.1:27015 -name Smoke -game-version 1.6.2f1 -seconds 20
+	-->
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net8.0</TargetFramework>
+		<LangVersion>latest</LangVersion>
+		<Nullable>disable</Nullable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Multiplayer.Core\Multiplayer.Core.csproj" />
+	</ItemGroup>
+
+</Project>

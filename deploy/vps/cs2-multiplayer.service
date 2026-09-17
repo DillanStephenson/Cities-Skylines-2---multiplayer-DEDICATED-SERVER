@@ -1,0 +1,29 @@
+[Unit]
+Description=Cities: Skylines II multiplayer server window
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cs2mp
+Group=cs2mp
+# PORT, GAME_VERSION, SERVER_NAME, MAX_PLAYERS and the secrets CS2MP_PASSWORD / CS2MP_OWNER_KEY
+# live in the env file; the secrets are read by the program from the environment so they never
+# show up in a process listing.
+EnvironmentFile=/etc/cs2-multiplayer/env
+WorkingDirectory=/opt/cs2-multiplayer
+ExecStart=/opt/cs2-multiplayer/Multiplayer.Server --plain --port ${PORT} --game-version ${GAME_VERSION} --name ${SERVER_NAME} --max-players ${MAX_PLAYERS}
+Restart=on-failure
+RestartSec=3
+# hardening, same shape as ims-api
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/cs2-multiplayer
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+	  Game-independent networking core: wire format, TCP transport and the session state machine.
+	  No reference to Game.dll or Unity so it can be unit-tested with plain dotnet.
+	  The mod project compiles these sources directly into Multiplayer.dll (single assembly),
+	  so keep everything here netstandard2.0 / C# 9 compatible.
+	-->
+	<PropertyGroup>
+		<TargetFramework>netstandard2.0</TargetFramework>
+		<LangVersion>9.0</LangVersion>
+		<Nullable>disable</Nullable>
+		<RootNamespace>Multiplayer.Core</RootNamespace>
+		<AssemblyName>Multiplayer.Core</AssemblyName>
+	</PropertyGroup>
+
+</Project>

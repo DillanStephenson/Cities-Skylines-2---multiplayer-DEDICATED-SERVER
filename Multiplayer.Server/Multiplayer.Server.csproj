@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+	  The server window. A console app that owns the session: accepts players, relays everything,
+	  shows live status and takes admin commands. The mod spawns it next to the game when the player
+	  clicks Host, but it can equally run on its own (or on a remote box) for a dedicated setup.
+
+	  net48 so it runs on any Windows PC with nothing to install (the game folder is where it ships);
+	  net8.0 for running it elsewhere. The networking core is compiled in, so it is one file.
+	-->
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFrameworks>net48;net8.0</TargetFrameworks>
+		<LangVersion>9.0</LangVersion>
+		<Nullable>disable</Nullable>
+		<RootNamespace>Multiplayer.Server</RootNamespace>
+		<AssemblyName>Multiplayer.Server</AssemblyName>
+		<GenerateDocumentationFile>false</GenerateDocumentationFile>
+		<SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<Compile Include="..\Multiplayer.Core\**\*.cs" Exclude="..\Multiplayer.Core\obj\**;..\Multiplayer.Core\bin\**" Link="Core\%(RecursiveDir)%(Filename)%(Extension)" />
+	</ItemGroup>
+
+	<!-- HttpClient for the playset watcher; part of the box on .NET Framework but not referenced by default. -->
+	<ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+		<Reference Include="System.Net.Http" />
+	</ItemGroup>
+
+</Project>

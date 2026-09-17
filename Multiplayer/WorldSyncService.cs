@@ -1,0 +1,518 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using System.Text;
+using System.Threading.Tasks;
+using Colossal.IO.AssetDatabase;
+using Colossal.Logging;
+using Colossal.PSI.Common;
+using Colossal.PSI.Environment;
+using Game;
+using Game.Assets;
+using Game.SceneFlow;
+using Game.UI;
+using Game.UI.Menu;
+using Multiplayer.Core.Session;
+using Unity.Entities;
+
+namespace Multiplayer
+{
+    /// <summary>
+    /// Moves the city between this game and the server window.
+    /// Upload (owner): save through the game's own save path into the user's save folder, read the package
+    /// back, stream it to the server. Download (anyone): write the package into the save folder, register it
+    /// with the asset database, then load it exactly the way the Load Game menu would.
+    /// Rules: the server's copy is the shared city. A player at the main menu, or a guest who has not loaded
+    /// it yet, gets it automatically; someone already in a city is told and can fetch it with a button.
+    /// The owner uploads when the server has nothing, on demand, and every few minutes while in sync.
+    /// </summary>
+    public sealed class WorldSyncService
+    {
+        private const string SaveNamePrefix = "MP ";
+        private const int RetryDelayMs = 30000;
+        private const int RegisterWaitFrames = 600;
+
+        private readonly ClientSession _session;
+        private readonly Setting _settings;
+        private readonly ILog _log;
+        private readonly Action<string> _note;
+
+        private int _loadedRevision;
+        private bool _busy;
+        private string _busyWhat = string.Empty;
+        private long _nextAttemptMs;
+        private long _lastUploadMs = -1;
+        private long _downloadReceived;
+        private long _downloadTotal;
+        private int _awaitingLoadRevision;
+        private bool _bootstrapped;
+
+        public string StatusLine { get; private set; } = string.Empty;
+
+        /// <summary>Revision of the server world this game is running, 0 when it is not.</summary>
+        public int LoadedRevision => _loadedRevision;
+
+        public WorldSyncService(ClientSession session, Setting settings, ILog log, Action<string> note)
+        {
+            _session = session ?? throw new ArgumentNullException(nameof(session));
+            _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+            _log = log ?? throw new ArgumentNullException(nameof(log));
+            _note = note ?? (_ => { });
+
+            _session.StateChanged += OnStateChanged;
+            _session.WorldInfoReceived += _ => RefreshStatus();
+            _session.WorldDownloadProgress += (got, total) =>
+            {
+                _downloadReceived = got;
+                _downloadTotal = total;
+                RefreshStatus();
+            };
+            _session.WorldDownloaded += OnWorldDownloaded;
+            _session.WorldDownloadFailed += reason =>
+            {
+                _note("World download failed: " + reason);
+                Idle();
+            };
+            _session.WorldUploadFinished += OnUploadFinished;
+        }
+
+        // ---------------------------------------------------------------- per-frame
+
+        public void Update(long nowMs)
+        {
+            if (!_bootstrapped)
+            {
+                _bootstrapped = true;
+                GameManager gameManager = GameManager.instance;
+                if (gameManager != null)
+                {
+                    gameManager.onGameLoadingComplete += OnGameLoadingComplete;
+                }
+            }
+
+            if (_session.State != SessionState.Connected || _busy || !_session.ServerWorldKnown || nowMs < _nextAttemptMs)
+            {
+                return;
+            }
+
+            GameManager manager = GameManager.instance;
+            if (manager == null || manager.isGameLoading)
+            {
+                return;
+            }
+
+            bool inGame = manager.gameMode == GameMode.Game;
+            bool inMenu = manager.gameMode == GameMode.MainMenu;
+            WorldInfo serverWorld = _session.ServerWorld;
+
+            if (serverWorld != null && serverWorld.Revision != _loadedRevision)
+            {
+                bool automatic = inMenu || (inGame && !_session.IsOwner && _loadedRevision == 0);
+                if (automatic)
+                {
+                    StartDownload(nowMs);
+                }
+
+                return;
+            }
+
+            if (_session.IsOwner && inGame)
+            {
+                if (serverWorld == null)
+                {
+                    StartUpload(nowMs, "the server has no city yet");
+                    return;
+                }
+
+                int minutes = _settings.AutoUploadMinutes;
+                if (minutes > 0 && _loadedRevision != 0 && _lastUploadMs >= 0 && nowMs - _lastUploadMs > minutes * 60000L)
+                {
+                    StartUpload(nowMs, "periodic backup");
+                }
+            }
+        }
+
+        // ---------------------------------------------------------------- buttons
+
+        public void UploadNow(long nowMs)
+        {
+            if (_session.State != SessionState.Connected || !_session.IsOwner)
+            {
+                _note("Only the host can upload the city");
+                return;
+            }
+
+            GameManager manager = GameManager.instance;
+            if (manager == null || manager.gameMode != GameMode.Game || manager.isGameLoading)
+            {
+                _note("Load a city first, then upload it");
+                return;
+            }
+
+            if (_busy)
+            {
+                _note("Busy: " + _busyWhat);
+                return;
+            }
+
+            StartUpload(nowMs, "requested");
+        }
+
+        public void DownloadNow(long nowMs)
+        {
+            if (_session.State != SessionState.Connected || _session.ServerWorld == null)
+            {
+                _note("The server holds no city to fetch");
+                return;
+            }
+
+            if (_busy)
+            {
+                _note("Busy: " + _busyWhat);
+                return;
+            }
+
+            StartDownload(nowMs);
+        }
+
+        // ---------------------------------------------------------------- upload
+
+        private void StartUpload(long nowMs, string why)
+        {
+            _busy = true;
+            _busyWhat = "saving and uploading the city";
+            _nextAttemptMs = nowMs + RetryDelayMs;
+            _note("Uploading the city (" + why + ")...");
+            RefreshStatus();
+            RunUpload();
+        }
+
+        private async void RunUpload()
+        {
+            try
+            {
+                World world = World.DefaultGameObjectInjectionWorld;
+                MenuUISystem menu = world.GetExistingSystemManaged<MenuUISystem>();
+                SaveInfo info = menu.GetSaveInfo(autoSave: false);
+                string saveName = SaveNameFor(_session.ServerName);
+                ILocalAssetDatabase database = AssetDatabase.user;
+                AssetDataPath path = SaveHelpers.GetAssetDataPath<SaveGameMetadata>(database, saveName);
+
+                if (database.Exists<PackageAsset>(path, out PackageAsset previous))
+                {
+                    database.DeleteAsset(previous);
+                }
+
+                await GameManager.instance.Save(saveName, info, database, (ScreenCaptureHelper.AsyncRequest)null);
+
+                if (!database.Exists<PackageAsset>(path, out PackageAsset package))
+                {
+                    throw new InvalidOperationException("The save package was not found after saving");
+                }
+
+                string file = ResolvePath(package.path);
+                byte[] bytes = await Task.Run(() => File.ReadAllBytes(file));
+                string guid = package.id.guid.ToString();
+                _log.Info("Uploading " + file + " (" + WorldInfo.FormatSize(bytes.Length) + ", guid " + guid + ")");
+
+                if (!_session.UploadWorld(saveName, info.cityName ?? string.Empty, guid, bytes))
+                {
+                    _note("Upload could not start (not connected as host?)");
+                    Idle();
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.Error("Upload failed: " + ex);
+                _note("Upload failed: " + ex.Message);
+                Idle();
+            }
+        }
+
+        private void OnUploadFinished(bool ok, int revision, string reason)
+        {
+            if (ok)
+            {
+                _loadedRevision = revision;
+                _lastUploadMs = NowMs();
+                _note("City uploaded as revision " + revision);
+            }
+            else
+            {
+                _note("Upload rejected: " + reason);
+            }
+
+            Idle();
+        }
+
+        // ---------------------------------------------------------------- download + load
+
+        private void StartDownload(long nowMs)
+        {
+            _busy = true;
+            _busyWhat = "downloading the city";
+            _nextAttemptMs = nowMs + RetryDelayMs;
+            _downloadReceived = 0;
+            _downloadTotal = _session.ServerWorld != null ? _session.ServerWorld.Size : 0;
+            _note("Downloading " + _session.ServerWorld + "...");
+            RefreshStatus();
+            if (!_session.RequestWorld())
+            {
+                _note("Download could not start");
+                Idle();
+            }
+        }
+
+        private void OnWorldDownloaded(WorldSnapshot snapshot)
+        {
+            _busyWhat = "installing and loading the city";
+            RefreshStatus();
+            RunLoad(snapshot);
+        }
+
+        private async void RunLoad(WorldSnapshot snapshot)
+        {
+            try
+            {
+                string saveName = SanitizeSaveName(snapshot.Info.SaveName);
+                if (saveName.Length == 0)
+                {
+                    saveName = SaveNameFor(_session.ServerName);
+                }
+
+                ILocalAssetDatabase database = AssetDatabase.user;
+                AssetDataPath assetPath = SaveHelpers.GetAssetDataPath<SaveGameMetadata>(database, saveName);
+                if (database.Exists<PackageAsset>(assetPath, out PackageAsset previous))
+                {
+                    database.DeleteAsset(previous);
+                }
+
+                string relativeDirectory = "Saves/" + PlatformManager.instance.userSpecificPath;
+                string directory = Path.Combine(EnvPath.kUserDataPath, relativeDirectory.Replace('/', Path.DirectorySeparatorChar));
+                Directory.CreateDirectory(directory);
+                string file = Path.Combine(directory, saveName + PackageAsset.kExtension);
+                byte[] data = snapshot.Data;
+                string guid = snapshot.Info.Guid ?? string.Empty;
+                await Task.Run(() =>
+                {
+                    File.WriteAllBytes(file, data);
+                    if (guid.Length > 0)
+                    {
+                        File.WriteAllText(file + AssetData.kMetaExtension, guid);
+                    }
+                });
+                _log.Info("Wrote " + file + " (" + WorldInfo.FormatSize(data.Length) + ")");
+
+                if (database.dataSource is FileSystemDataSource fileSystem)
+                {
+                    fileSystem.AddEntry(AssetDataPath.Create(relativeDirectory, saveName + PackageAsset.kExtension, hasExtension: true, EscapeStrategy.None), typeof(PackageAsset));
+                }
+                else
+                {
+                    _log.Warn("User database is not file based; relying on its own watcher to notice the save");
+                }
+
+                SaveGameMetadata metadata = null;
+                for (int i = 0; i < RegisterWaitFrames && metadata == null; i++)
+                {
+                    metadata = FindSave(saveName);
+                    if (metadata == null)
+                    {
+                        await Task.Delay(16);
+                    }
+                }
+
+                if (metadata == null)
+                {
+                    throw new InvalidOperationException("The game did not register the downloaded save '" + saveName + "'");
+                }
+
+                SaveInfo info = metadata.target;
+                if (info == null)
+                {
+                    throw new InvalidOperationException("Downloaded save has no metadata");
+                }
+
+                _awaitingLoadRevision = snapshot.Info.Revision;
+                _note("Loading " + (string.IsNullOrEmpty(info.cityName) ? saveName : info.cityName) + " (revision " + snapshot.Info.Revision + ")...");
+                LoadThroughMenu(info);
+            }
+            catch (Exception ex)
+            {
+                _log.Error("Installing the downloaded city failed: " + ex);
+                _note("Could not load the downloaded city: " + ex.Message);
+                _awaitingLoadRevision = 0;
+                Idle();
+            }
+        }
+
+        /// <summary>Same path the Load Game menu takes: refresh its save list, then hand it the id to load.</summary>
+        private static void LoadThroughMenu(SaveInfo info)
+        {
+            World world = World.DefaultGameObjectInjectionWorld;
+            MenuUISystem menu = world.GetExistingSystemManaged<MenuUISystem>();
+            BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+
+            MethodInfo updateSaves = typeof(MenuUISystem).GetMethod("UpdateSaves", flags, null, Type.EmptyTypes, null);
+            updateSaves?.Invoke(menu, null);
+
+            MethodInfo load = typeof(MenuUISystem).GetMethod("SafeLoadGame", flags);
+            if (load == null)
+            {
+                throw new MissingMethodException("MenuUISystem.SafeLoadGame not found; the game changed");
+            }
+
+            var args = new MenuUISystem.LoadGameArgs
+            {
+                saveId = info.id,
+                cityName = info.cityName,
+                options = info.options,
+                gameMode = info.gameMode,
+            };
+            load.Invoke(menu, new object[] { args, true });
+        }
+
+        private void OnGameLoadingComplete(Colossal.Serialization.Entities.Purpose purpose, GameMode mode)
+        {
+            if (_awaitingLoadRevision == 0)
+            {
+                return;
+            }
+
+            if (mode == GameMode.Game)
+            {
+                _loadedRevision = _awaitingLoadRevision;
+                _lastUploadMs = NowMs();
+                _note("Now playing the shared city, revision " + _loadedRevision);
+            }
+            else
+            {
+                _note("The shared city did not load (game went to " + mode + ")");
+            }
+
+            _awaitingLoadRevision = 0;
+            Idle();
+        }
+
+        // ---------------------------------------------------------------- helpers
+
+        private static SaveGameMetadata FindSave(string saveName)
+        {
+            foreach (SaveGameMetadata metadata in AssetDatabase.global.GetAssets(default(SearchFilter<SaveGameMetadata>)))
+            {
+                try
+                {
+                    if (string.Equals(metadata.name, saveName, StringComparison.OrdinalIgnoreCase) && metadata.isValidSaveGame)
+                    {
+                        return metadata;
+                    }
+                }
+                catch (Exception)
+                {
+                    // A half-registered asset; try again next frame.
+                }
+            }
+
+            return null;
+        }
+
+        private static string ResolvePath(string path)
+        {
+            if (File.Exists(path))
+            {
+                return path;
+            }
+
+            string combined = Path.Combine(EnvPath.kUserDataPath, path.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(combined))
+            {
+                return combined;
+            }
+
+            throw new FileNotFoundException("Save package not found", path);
+        }
+
+        public static string SaveNameFor(string serverName)
+        {
+            string name = SanitizeSaveName(SaveNamePrefix + (serverName ?? string.Empty));
+            return name.Length > SaveNamePrefix.Length ? name : SaveNamePrefix + "Server";
+        }
+
+        public static string SanitizeSaveName(string name)
+        {
+            var builder = new StringBuilder();
+            foreach (char c in (name ?? string.Empty).Trim())
+            {
+                if (char.IsLetterOrDigit(c) || c == ' ' || c == '-' || c == '_')
+                {
+                    builder.Append(c);
+                }
+            }
+
+            string result = builder.ToString().Trim();
+            return result.Length > 40 ? result.Substring(0, 40).Trim() : result;
+        }
+
+        private void OnStateChanged(SessionState state)
+        {
+            if (state != SessionState.Connected)
+            {
+                _loadedRevision = 0;
+                _lastUploadMs = -1;
+                _awaitingLoadRevision = 0;
+                _nextAttemptMs = 0;
+                Idle();
+            }
+        }
+
+        private void Idle()
+        {
+            _busy = false;
+            _busyWhat = string.Empty;
+            _downloadReceived = 0;
+            _downloadTotal = 0;
+            RefreshStatus();
+        }
+
+        private void RefreshStatus()
+        {
+            if (_session.State != SessionState.Connected)
+            {
+                StatusLine = string.Empty;
+                return;
+            }
+
+            var builder = new StringBuilder();
+            if (_busy)
+            {
+                builder.Append("Working: ").Append(_busyWhat);
+                if (_downloadTotal > 0)
+                {
+                    builder.Append(' ').Append(100 * _downloadReceived / _downloadTotal).Append('%');
+                }
+            }
+            else if (!_session.ServerWorldKnown)
+            {
+                builder.Append("Shared city: unknown yet");
+            }
+            else if (_session.ServerWorld == null)
+            {
+                builder.Append(_session.IsOwner ? "Shared city: none yet; load a city and it uploads" : "Shared city: none yet; waiting for the host");
+            }
+            else
+            {
+                WorldInfo world = _session.ServerWorld;
+                builder.Append("Shared city: ").Append(world);
+                builder.Append(world.Revision == _loadedRevision ? " (loaded)" : _loadedRevision == 0 ? " (not loaded)" : " (you run revision " + _loadedRevision + ")");
+            }
+
+            StatusLine = builder.ToString();
+        }
+
+        private static long NowMs()
+        {
+            return Environment.TickCount;
+        }
+    }
+}

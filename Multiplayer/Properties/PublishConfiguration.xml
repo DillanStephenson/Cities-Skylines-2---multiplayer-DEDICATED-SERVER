@@ -1,0 +1,49 @@
+<Publish>
+	<!--Id must be set in order to update existed mod. it is not required for publishing mod for the first time-->
+	<ModId Value="" />
+	<!--Name of the mod to display to players-->
+	<DisplayName Value="Multiplayer Co-op" />
+	<!--Short description of the mod-->
+	<ShortDescription Value="Build one city together. Roads, zoning, terrain and policies sync live; a small server window (or a Linux server) holds the shared city." />
+	<!--Long description of the mod. Single line or multi line. Supports minimal markdown subset-->
+	<LongDescription>
+Co-op multiplayer for Cities: Skylines II built around a **server window**: a small console app that holds the shared city and relays what everyone does.
+
+**How it works**
+- Main menu > **Multiplayer**. **Host game** opens the server window next to your game and joins it; friends join your address and port. **Join game** connects to a friend or to a dedicated server.
+- Joining fetches the shared city and loads it. The host saves the city to the server from the in-game panel (bottom-right button), or automatically every few minutes.
+- What anyone builds, zones, bulldozes, terraforms or sets in a panel (taxes, budgets, fees, policies, building options) shows up on every PC live. The simulation itself runs per PC; the host's saves are the common ground.
+
+**Mods**
+Any mod is allowed as long as everyone runs the same playset. The server compares mod lists (ignoring version numbers) and tells a rejected player which playset to activate. A dedicated server can follow a published Paradox playset by itself.
+
+**Dedicated server**
+The same window runs on a Linux or Windows box without the game. Downloads and setup notes are on GitHub.
+
+Early access: play with people you know, keep regular saves, and report problems on GitHub.
+	</LongDescription>
+	<!--Thumbnail-->
+	<Thumbnail Value="Properties/Thumbnail.png" />
+	<!--Screenshot, can be set multiple times-->
+	<Screenshot Value="" />
+	<!--Tag, can be set multiple times-->
+	<Tag Value="Code Mod" />
+	<!--Link to the forum post where the mod can be discussed-->
+	<ForumLink Value="" />
+	<!--Version of the mod-->
+	<ModVersion Value="0.2.0" />
+	<!--Recommended version of the base game to use the mod-->
+	<GameVersion Value="1.6.*" />
+	<!--Dependency for the mod, can be set multiple times-->
+	<Dependency Id="" />
+	<!--Required DLC, can be set multiple times. Supported values are "Landmark Buildings", "San Fransisco Set", "Beach Properties", "Urban Promenades", "Modern Architecture"-->
+	<RequiredDLC Value="" />
+	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
+	<ChangeLog>
+0.2.0: first published build. Server window, shared city transfer, live build sync (nets, objects, zoning, terrain, transit lines), city settings and building options sync, main-menu screens, in-game panel, playset-aware mod check.
+	</ChangeLog>
+	<!--External link, can be set multiple times. supported types are "discord", "github", "youtube", "twitch", "x", "paypal", "patreon", "buymeacoffee", "kofi", "crowdin", "gitlab", "gofundme"-->
+	<ExternalLink Type="github" Url="https://github.com/DillanStephenson/cs2-multiplayer" />
+	<!--Supported values Public, Private, Unlisted-->
+	<AccessLevel Value="Private" />
+</Publish>
