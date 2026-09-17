@@ -285,22 +285,31 @@ namespace Multiplayer.Core.Session
         {
             get
             {
+                return State == SessionState.Connected && LeaderPlayerId == LocalPlayerId;
+            }
+        }
+
+        /// <summary>The player id of the source of truth: the owner when one is on, else the lowest id. 0 when not connected.</summary>
+        public int LeaderPlayerId
+        {
+            get
+            {
                 if (State != SessionState.Connected)
                 {
-                    return false;
+                    return 0;
                 }
 
                 if (IsOwner)
                 {
-                    return true;
+                    return LocalPlayerId;
                 }
 
-                int lowest = int.MaxValue;
+                int lowest = LocalPlayerId;
                 foreach (PlayerInfo player in Players)
                 {
                     if (player.IsOwner)
                     {
-                        return false;
+                        return player.PlayerId;
                     }
 
                     if (player.PlayerId < lowest)
@@ -309,7 +318,7 @@ namespace Multiplayer.Core.Session
                     }
                 }
 
-                return lowest == LocalPlayerId;
+                return lowest;
             }
         }
 

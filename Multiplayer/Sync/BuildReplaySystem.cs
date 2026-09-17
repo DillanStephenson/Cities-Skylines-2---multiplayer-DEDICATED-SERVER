@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text;
 using Game;
 using Game.Common;
+using Game.Input;
 using Game.Notifications;
 using Game.Prefabs;
 using Game.Tools;
@@ -42,6 +43,9 @@ namespace Multiplayer.Sync
         /// </summary>
         private static readonly FieldInfo ActiveToolField = typeof(ToolSystem).GetField("m_ActiveTool", BindingFlags.Instance | BindingFlags.NonPublic);
 
+        /// <summary>The tool's apply action (the mouse button, usually): while it is held the player is mid-drag.</summary>
+        private static readonly PropertyInfo ApplyActionProperty = typeof(ToolBaseSystem).GetProperty("applyAction", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+
         // A List used as a FIFO: Queue<T> is ambiguous between the game's mscorlib and System.dll on net48.
         private readonly List<QueuedBuild> m_Queue = new List<QueuedBuild>();
 
@@ -58,7 +62,12 @@ namespace Multiplayer.Sync
         private QueuedBuild m_Current;
         /// <summary>Frames a queued command waits for the player to leave their tool before it is borrowed.</summary>
         private const int BorrowAfterFrames = 120;
+
+        /// <summary>A held mouse button (a road being dragged out, a zone being painted) is never interrupted for this long.</summary>
+        private const int HeldButtonWaitFrames = 900;
         private int m_WaitedFrames;
+        private int m_HeldFrames;
+        private bool m_ModeSetThisFrame;
         private ToolBaseSystem m_SavedTool;
         private PrefabBase m_SavedPrefab;
         private int m_InjectedCount;
@@ -147,6 +156,7 @@ namespace Multiplayer.Sync
             // The guard covers exactly one apply frame.
             SyncGuard.IsReplaying = false;
             SyncGuard.CaptureAnyway = false;
+            m_ModeSetThisFrame = false;
 
             if (ApplyModeSetter == null)
             {
@@ -154,6 +164,25 @@ namespace Multiplayer.Sync
             }
 
             m_FrameCount++;
+            Step();
+            SwallowBorrowedClick();
+        }
+
+        /// <summary>
+        /// While the selection tool is borrowed the player still sees their own tool in the toolbar, so a click
+        /// now must not select whatever is under the cursor (it would open its panel and, applied together with
+        /// the other player's build, get captured). It does nothing instead; the player's tool is back next frame.
+        /// </summary>
+        private void SwallowBorrowedClick()
+        {
+            if (m_SavedTool != null && !m_ModeSetThisFrame && m_ToolSystem.activeTool == m_DefaultTool && m_ToolSystem.applyMode == ApplyMode.Apply)
+            {
+                SetApplyMode(ApplyMode.None);
+            }
+        }
+
+        private void Step()
+        {
             switch (m_Phase)
             {
                 case Phase.Idle:
@@ -311,12 +340,20 @@ namespace Multiplayer.Sync
             if (active == m_DefaultTool)
             {
                 m_WaitedFrames = 0;
+                m_HeldFrames = 0;
                 return true;
             }
 
             if (m_ToolSystem.applyMode == ApplyMode.Apply)
             {
                 // The player is placing something this very frame; let that land first.
+                return false;
+            }
+
+            if (ApplyHeld(active) && ++m_HeldFrames < HeldButtonWaitFrames)
+            {
+                // Mouse button down: a road being dragged out, zones being painted. Taking the tool now would
+                // cut that short and, with the button still down when it comes back, start a fresh one.
                 return false;
             }
 
@@ -329,7 +366,31 @@ namespace Multiplayer.Sync
             m_SavedPrefab = m_ToolSystem.activePrefab;
             SetActiveToolQuietly(m_DefaultTool);
             m_WaitedFrames = 0;
+            m_HeldFrames = 0;
             return false;
+        }
+
+        private static bool ApplyHeld(ToolBaseSystem tool)
+        {
+            if (ApplyActionProperty == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                return ApplyActionProperty.GetValue(tool) is IProxyAction action && action.enabled && action.IsPressed();
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>True for a definition entity this system made from another player's build (never the local player's own).</summary>
+        public bool OwnsDefinition(Entity definition)
+        {
+            return m_Injected.Contains(definition);
         }
 
         private void RestoreTool()
@@ -556,6 +617,7 @@ namespace Multiplayer.Sync
 
         private void SetApplyMode(ApplyMode mode)
         {
+            m_ModeSetThisFrame = true;
             ApplyModeSetter.Invoke(m_DefaultTool, new object[] { mode });
         }
     }

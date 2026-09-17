@@ -19,6 +19,7 @@ namespace Multiplayer.Sync
     {
         private ToolSystem m_ToolSystem;
         private PrefabSystem m_PrefabSystem;
+        private BuildReplaySystem m_Replay;
         private EntityQuery m_DefinitionQuery;
         private DefinitionCodec m_Codec;
         private int m_Sequence;
@@ -28,6 +29,7 @@ namespace Multiplayer.Sync
             base.OnCreate();
             m_ToolSystem = World.GetOrCreateSystemManaged<ToolSystem>();
             m_PrefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
+            m_Replay = World.GetOrCreateSystemManaged<BuildReplaySystem>();
             m_DefinitionQuery = GetEntityQuery(ComponentType.ReadOnly<CreationDefinition>());
             m_Codec = new DefinitionCodec(EntityManager, new EntityResolver(World, m_PrefabSystem));
         }
@@ -42,6 +44,13 @@ namespace Multiplayer.Sync
 
             if (SyncGuard.IsReplaying && !SyncGuard.CaptureAnyway)
             {
+                return;
+            }
+
+            if (m_Replay != null && m_Replay.IsBorrowingTool && !SyncGuard.CaptureAnyway)
+            {
+                // The selection tool stands in for the player's while another player's build lands: nothing
+                // applied in these frames is the player's own.
                 return;
             }
 
@@ -62,6 +71,13 @@ namespace Multiplayer.Sync
                         // Select: the default tool picking an entity. Permanent: the simulation spawning sub-parts
                         // (driveways, building sub-nets) through the same pipeline; those happen on every game by themselves.
                         if ((creation.m_Flags & (CreationFlags.Select | CreationFlags.Permanent)) != 0)
+                        {
+                            skippedSelect++;
+                            continue;
+                        }
+
+                        // Another player's build being recreated here must never go back out as ours.
+                        if (m_Replay != null && !SyncGuard.CaptureAnyway && m_Replay.OwnsDefinition(definitions[i]))
                         {
                             skippedSelect++;
                             continue;

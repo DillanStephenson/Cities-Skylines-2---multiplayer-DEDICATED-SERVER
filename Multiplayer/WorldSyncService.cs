@@ -169,10 +169,10 @@ namespace Multiplayer
         }
 
         /// <summary>The leader was asked for a fresh save by someone who fell out of step: upload now, at most every 30 s.</summary>
-        public void UploadIfAsked(long nowMs)
+        public void UploadIfAsked(long nowMs, string why, bool evenIfNotLeader = false)
         {
             GameManager manager = GameManager.instance;
-            if (!_session.IsLeader || _busy || manager == null || manager.gameMode != GameMode.Game || manager.isGameLoading)
+            if ((!_session.IsLeader && !evenIfNotLeader) || _busy || manager == null || manager.gameMode != GameMode.Game || manager.isGameLoading)
             {
                 return;
             }
@@ -183,7 +183,60 @@ namespace Multiplayer
             }
 
             _lastAskedUploadMs = nowMs;
-            StartUpload(nowMs, "a player fell out of step and asked for a fresh save");
+            StartUpload(nowMs, why);
+        }
+
+        // ---------------------------------------------------------------- fresh save on join
+
+        /// <summary>How long a joiner waits for the players in the city to save before taking the stored copy.</summary>
+        private const long FreshSaveWaitMs = 75000;
+        private long _freshSaveAskedMs = -1;
+        private int _freshSaveBaseRevision;
+
+        /// <summary>
+        /// The copy on the server is as old as the last save; the players in the city have built since. Before
+        /// the first download of a connection, when someone else is on, ask them to save now and wait (up to
+        /// <see cref="FreshSaveWaitMs"/>) for a newer revision to appear. True while still waiting.
+        /// </summary>
+        private bool WaitForFreshSave(long nowMs, WorldInfo serverWorld)
+        {
+            if (serverWorld == null || _session.Players.Count <= 1)
+            {
+                return false;
+            }
+
+            if (_freshSaveAskedMs < 0)
+            {
+                _freshSaveAskedMs = nowMs;
+                _freshSaveBaseRevision = serverWorld.Revision;
+                try
+                {
+                    _session.SendGameplayCommand(MultiplayerService.SaveNowKind, new byte[0]);
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn("Could not ask for a fresh save: " + ex.Message);
+                    return false;
+                }
+
+                _note("Asking the players in the city to save it first (up to a minute)...");
+                RefreshStatus();
+                return true;
+            }
+
+            if (serverWorld.Revision > _freshSaveBaseRevision)
+            {
+                _note("Fresh save arrived: revision " + serverWorld.Revision);
+                return false;
+            }
+
+            if (nowMs - _freshSaveAskedMs < FreshSaveWaitMs)
+            {
+                return true;
+            }
+
+            _note("Nobody saved within the minute; fetching the stored copy (revision " + serverWorld.Revision + ")");
+            return false;
         }
         private const int NewCityMaxTries = 5;
 
@@ -358,16 +411,23 @@ namespace Multiplayer
                 // is the one expected to upload its own), or when the player asked to follow other people's saves.
                 // Following saves never interrupts someone who is building: what they placed in the last two
                 // minutes may not be in that save yet, and a reload would take it away from under them.
-                bool recentlyBuilt = LastLocalBuildMs > 0 && nowMs - LastLocalBuildMs < RecentBuildMs;
+                // A plain save by someone else never reloads a running game: the others already have every
+                // build live, and a reload would throw away whatever was built after that save started. Only
+                // the group sync and a drift resync (both set ResyncPending) reload.
                 bool automatic = inMenu
                     || (inGame && _loadedRevision == 0 && !_session.IsLeader)
-                    || (inGame && _loadedRevision != 0 && ResyncPending)
-                    || (inGame && _loadedRevision != 0 && _settings.FollowSaves && !recentlyBuilt);
-                if (automatic)
+                    || (inGame && _loadedRevision != 0 && ResyncPending);
+                if (!automatic)
                 {
-                    StartDownload(nowMs);
+                    return;
                 }
 
+                if (inMenu && !ResyncPending && WaitForFreshSave(nowMs, serverWorld))
+                {
+                    return;
+                }
+
+                StartDownload(nowMs);
                 return;
             }
 
@@ -765,6 +825,7 @@ namespace Multiplayer
                 _hostChoiceAsked = false;
                 ResyncPending = false;
                 _lastAskedUploadMs = -1;
+                _freshSaveAskedMs = -1;
                 _forcedSyncWaiting = false;
                 _forcedSyncUpload = false;
                 _lastForcedSyncMs = -1;

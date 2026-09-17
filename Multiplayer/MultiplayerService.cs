@@ -259,10 +259,14 @@ namespace Multiplayer
 
             if (message.Kind == SaveNowKind)
             {
-                if (IsLeader)
+                // The source of truth answers. When the asker is the source of truth itself (the owner joining
+                // a city others are already playing), whoever is in the city answers instead: their copy is the
+                // one with everything built since the last save.
+                bool askerLeads = message.OriginPlayerId == Session.LeaderPlayerId && message.OriginPlayerId != Session.LocalPlayerId;
+                if (IsLeader || askerLeads)
                 {
-                    _log.Info(PlayerName(message.OriginPlayerId) + " fell out of step and asked for a fresh save");
-                    WorldSync.UploadIfAsked(Now);
+                    _log.Info(PlayerName(message.OriginPlayerId) + " asked for a fresh save");
+                    WorldSync.UploadIfAsked(Now, PlayerName(message.OriginPlayerId) + " asked for a fresh save", askerLeads);
                 }
 
                 return;

@@ -105,7 +105,8 @@ namespace Multiplayer
         [SettingsUISection(kSection, kSessionGroup)]
         public int AutoUploadMinutes { get; set; }
 
-        [SettingsUISection(kSection, kSessionGroup)]
+        /// <summary>No longer used: a plain save never reloads the others (that lost everything built since). Kept so old settings files still load.</summary>
+        [SettingsUIHidden]
         public bool FollowSaves { get; set; }
 
         [SettingsUISlider(min = 0, max = 60, step = 5, scalarMultiplier = 1)]
