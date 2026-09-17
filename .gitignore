@@ -20,3 +20,7 @@ Thumbs.db
 # Never commit server secrets: passwords and owner keys live in the environment (see deploy/vps/README.md)
 *.secrets
 *secrets*.txt
+
+# Game post-processor state
+Multiplayer/Library/
+
