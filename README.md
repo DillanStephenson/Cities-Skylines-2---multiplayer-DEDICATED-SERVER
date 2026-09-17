@@ -7,7 +7,8 @@ Play one city with friends. A small server program holds the city and passes eve
 ## What it does
 
 - Roads, buildings, zoning, bulldozing, terrain, districts and transit lines you place show up on everyone's screen straight away.
-- Taxes, budgets, service fees, city policies and building options sync too.
+- Taxes, budgets, service fees, city policies and building options sync too, and so does progression: development nodes, XP and milestones.
+- You see what the others are about to place: the road they are dragging out, the building under their cursor, as a ghost in their colour.
 - Traffic Tool Essentials settings (junction signals, phases, lane groups, lane directions, labels, depot zones) and the Traffic mod's lane connections and priority signs follow whoever changes them, as long as everyone has the mod.
 - You see where the others are: a ring on the map where each player is looking, a dot under their mouse, and their name over it.
 - Anyone can save the city to the server. Whoever joins gets the latest copy and loads it.

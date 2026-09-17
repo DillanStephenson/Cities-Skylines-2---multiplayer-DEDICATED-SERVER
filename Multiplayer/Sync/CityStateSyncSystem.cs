@@ -37,8 +37,14 @@ namespace Multiplayer.Sync
         private CitySystem m_CitySystem;
         private PoliciesUISystem m_PoliciesUISystem;
         private PrefabSystem m_PrefabSystem;
+        private DevTreeSystem m_DevTreeSystem;
         private EntityResolver m_Resolver;
         private EntityQuery m_BudgetServiceQuery;
+        private EntityQuery m_DevNodeQuery;
+
+        /// <summary>Development nodes another player bought that could not be bought here yet (a prerequisite still locked): retried each check.</summary>
+        private readonly Dictionary<string, int> m_PendingDevNodes = new Dictionary<string, int>(StringComparer.Ordinal);
+        private const int DevNodeRetries = 120;
 
         private readonly Dictionary<string, float> m_Last = new Dictionary<string, float>(StringComparer.Ordinal);
         private readonly List<CityStateCommand> m_Incoming = new List<CityStateCommand>();
@@ -67,7 +73,9 @@ namespace Multiplayer.Sync
             m_PoliciesUISystem = World.GetOrCreateSystemManaged<PoliciesUISystem>();
             m_PrefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
             m_Resolver = new EntityResolver(World, m_PrefabSystem);
+            m_DevTreeSystem = World.GetOrCreateSystemManaged<DevTreeSystem>();
             m_BudgetServiceQuery = GetEntityQuery(ComponentType.ReadOnly<CollectedCityServiceBudgetData>(), ComponentType.ReadOnly<PrefabData>());
+            m_DevNodeQuery = GetEntityQuery(ComponentType.ReadOnly<DevTreeNodeData>(), ComponentType.ReadOnly<PrefabData>());
         }
 
         protected override void OnUpdate()
@@ -90,6 +98,11 @@ namespace Multiplayer.Sync
             if (m_Frame % CheckIntervalFrames != 0)
             {
                 return;
+            }
+
+            if (m_PendingDevNodes.Count > 0)
+            {
+                RetryPendingDevNodes();
             }
 
             Dictionary<string, float> current;
@@ -136,10 +149,21 @@ namespace Multiplayer.Sync
             if (service.IsLeader)
             {
                 m_MoneyFrame += CheckIntervalFrames;
-                if (m_MoneyFrame >= MoneyIntervalFrames && TryReadMoney(out int balance))
+                if (m_MoneyFrame >= MoneyIntervalFrames)
                 {
                     m_MoneyFrame = 0;
-                    command.Entries.Add(new StateEntry("money", balance));
+                    if (TryReadMoney(out int balance))
+                    {
+                        command.Entries.Add(new StateEntry("money", balance));
+                    }
+
+                    // Progress drifts the same way: each PC earns its own XP. The leader's XP and development
+                    // points are the shared ones; milestones then fire on every PC at the same XP.
+                    if (TryReadXp(out int xp))
+                    {
+                        command.Entries.Add(new StateEntry("xp", xp));
+                        command.Entries.Add(new StateEntry("devpoints", m_DevTreeSystem.points));
+                    }
                 }
             }
 
@@ -216,6 +240,22 @@ namespace Multiplayer.Sync
                 }
             }
 
+            // Development tree: which nodes have been bought. A node going from locked to unlocked here is a purchase.
+            using (NativeArray<Entity> nodes = m_DevNodeQuery.ToEntityArray(Allocator.Temp))
+            {
+                for (int i = 0; i < nodes.Length; i++)
+                {
+                    string name = DevNodeName(nodes[i]);
+                    if (name == null)
+                    {
+                        continue;
+                    }
+
+                    bool locked = EntityManager.HasComponent<Locked>(nodes[i]) && EntityManager.IsComponentEnabled<Locked>(nodes[i]);
+                    state["devnode:" + name] = locked ? 0f : 1f;
+                }
+            }
+
             return state;
         }
 
@@ -266,6 +306,22 @@ namespace Multiplayer.Sync
         private bool Apply(string key, float value)
         {
             string[] parts = key.Split(':');
+            switch (parts[0])
+            {
+                case "money":
+                    return ApplyMoney((int)Math.Round(value));
+
+                case "xp":
+                    return ApplyXp((int)Math.Round(value));
+
+                case "devpoints":
+                    return ApplyDevPoints((int)Math.Round(value));
+
+                case "devnode":
+                    // Only "bought" travels; nothing ever locks a node again.
+                    return parts.Length >= 2 && value > 0.5f && ApplyDevNode(key.Substring(key.IndexOf(':') + 1), true);
+            }
+
             if (parts.Length < 2)
             {
                 return false;
@@ -273,8 +329,6 @@ namespace Multiplayer.Sync
 
             switch (parts[0])
             {
-                case "money":
-                    return ApplyMoney((int)Math.Round(value));
 
                 case "tax":
                     return ApplyTax(parts, value);
@@ -453,6 +507,139 @@ namespace Multiplayer.Sync
                     active = (policies[i].m_Flags & PolicyFlags.Active) != 0;
                     adjustment = policies[i].m_Adjustment;
                     return;
+                }
+            }
+        }
+
+        // ------------------------------------------------------------------ progression
+
+        private bool TryReadXp(out int xp)
+        {
+            xp = 0;
+            Entity city = m_CitySystem.City;
+            if (city == Entity.Null || !EntityManager.HasComponent<XP>(city))
+            {
+                return false;
+            }
+
+            xp = EntityManager.GetComponentData<XP>(city).m_XP;
+            return true;
+        }
+
+        private bool ApplyXp(int xp)
+        {
+            Entity city = m_CitySystem.City;
+            if (city == Entity.Null || !EntityManager.HasComponent<XP>(city))
+            {
+                return false;
+            }
+
+            if (EntityManager.GetComponentData<XP>(city).m_XP == xp)
+            {
+                return false;
+            }
+
+            EntityManager.SetComponentData(city, new XP { m_XP = xp });
+            return true;
+        }
+
+        private bool ApplyDevPoints(int points)
+        {
+            if (m_DevTreeSystem.points == points)
+            {
+                return false;
+            }
+
+            m_DevTreeSystem.points = points;
+            return true;
+        }
+
+        private string DevNodeName(Entity node)
+        {
+            try
+            {
+                PrefabBase prefab = m_PrefabSystem.GetPrefab<PrefabBase>(node);
+                return prefab != null ? prefab.name : null;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private Entity FindDevNode(string name)
+        {
+            if (m_PrefabSystem.TryGetPrefab(new PrefabID("DevTreeNodePrefab", name), out PrefabBase prefab) && m_PrefabSystem.TryGetEntity(prefab, out Entity node))
+            {
+                return node;
+            }
+
+            return Entity.Null;
+        }
+
+        /// <summary>
+        /// Buys the node here the way the other player bought it there: the points they paid are matched so the
+        /// game's own purchase goes through and deducts them; the unlock itself is the game's, end of frame.
+        /// </summary>
+        private bool ApplyDevNode(string name, bool queueRetry)
+        {
+            Entity node = FindDevNode(name);
+            if (node == Entity.Null)
+            {
+                Mod.log.Warn("Development node '" + name + "' does not exist here");
+                return false;
+            }
+
+            if (!EntityManager.HasComponent<Locked>(node) || !EntityManager.IsComponentEnabled<Locked>(node))
+            {
+                m_PendingDevNodes.Remove(name);
+                return false;
+            }
+
+            DevTreeNodeData data = EntityManager.GetComponentData<DevTreeNodeData>(node);
+            if (m_DevTreeSystem.points < data.m_Cost)
+            {
+                m_DevTreeSystem.points = data.m_Cost;
+            }
+
+            int before = m_DevTreeSystem.points;
+            m_DevTreeSystem.Purchase(node);
+            if (m_DevTreeSystem.points < before)
+            {
+                m_PendingDevNodes.Remove(name);
+                Mod.log.Info("Bought development node '" + name + "' to match the other player (" + data.m_Cost + " points)");
+                return true;
+            }
+
+            if (queueRetry && !m_PendingDevNodes.ContainsKey(name))
+            {
+                // A prerequisite is still locked here, most likely; it lands a moment later.
+                m_PendingDevNodes[name] = DevNodeRetries;
+            }
+
+            return false;
+        }
+
+        private void RetryPendingDevNodes()
+        {
+            var names = new List<string>(m_PendingDevNodes.Keys);
+            foreach (string name in names)
+            {
+                if (ApplyDevNode(name, false))
+                {
+                    m_ResyncAfterApply = true;
+                    continue;
+                }
+
+                int left = m_PendingDevNodes.ContainsKey(name) ? m_PendingDevNodes[name] - 1 : 0;
+                if (left <= 0)
+                {
+                    m_PendingDevNodes.Remove(name);
+                    Mod.log.Warn("Development node '" + name + "' could not be bought here; it will come with the next save");
+                }
+                else
+                {
+                    m_PendingDevNodes[name] = left;
                 }
             }
         }
