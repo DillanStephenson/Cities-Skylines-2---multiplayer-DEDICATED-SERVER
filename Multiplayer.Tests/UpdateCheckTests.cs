@@ -7,7 +7,7 @@ namespace Multiplayer.Tests
     /// <summary>Parsing GitHub's latest-release answer and deciding whether it is newer than what runs.</summary>
     public class UpdateCheckTests
     {
-        private const string Latest = "{\"url\":\"https://api.github.com/repos/DillanStephenson/cs2-multiplayer/releases/1\",\"html_url\":\"https://github.com/DillanStephenson/cs2-multiplayer/releases/tag/v0.2.0\","
+        private const string Latest = "{\"url\":\"https://api.github.com/repos/DillanStephenson/Cities-Skylines-2---multiplayer-DEDICATED-SERVER/releases/1\",\"html_url\":\"https://github.com/DillanStephenson/Cities-Skylines-2---multiplayer-DEDICATED-SERVER/releases/tag/v0.2.0\","
             + "\"tag_name\":\"v0.2.0\",\"name\":\"v0.2.0\",\"draft\":false,\"prerelease\":false,\"published_at\":\"2026-09-17T14:25:10Z\","
             + "\"assets\":[{\"name\":\"cs2-multiplayer-server-linux-x64-v0.2.0.zip\",\"browser_download_url\":\"https://github.com/x/y/releases/download/v0.2.0/a.zip\"}]}";
 
@@ -17,7 +17,7 @@ namespace Multiplayer.Tests
             ReleaseInfo release = GitHubReleases.Parse(Latest);
             Assert.Equal("v0.2.0", release.Tag);
             Assert.Equal(new Version(0, 2, 0, 0), release.Version);
-            Assert.Equal("https://github.com/DillanStephenson/cs2-multiplayer/releases/tag/v0.2.0", release.Url);
+            Assert.Equal("https://github.com/DillanStephenson/Cities-Skylines-2---multiplayer-DEDICATED-SERVER/releases/tag/v0.2.0", release.Url);
             Assert.Equal("2026-09-17T14:25:10Z", release.PublishedAt);
         }
 

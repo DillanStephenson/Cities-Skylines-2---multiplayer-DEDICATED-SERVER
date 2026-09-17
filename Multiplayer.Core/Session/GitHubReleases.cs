@@ -20,7 +20,7 @@ namespace Multiplayer.Core.Session
     /// </summary>
     public static class GitHubReleases
     {
-        public const string Repository = "DillanStephenson/cs2-multiplayer";
+        public const string Repository = "DillanStephenson/Cities-Skylines-2---multiplayer-DEDICATED-SERVER";
 
         public static string LatestUrl(string repository)
         {

@@ -46,7 +46,7 @@ Early access: play with people you know, keep regular saves, and report problems
 0.2.3: first published build. Server window, shared city, live build sync (roads, buildings, zoning, terrain, transit lines), city settings and building options sync, shared treasury, player markers on the map, anyone can save, menu screens, in-game panel, playset-aware mod check, server update check.
 	</ChangeLog>
 	<!--External link, can be set multiple times. supported types are "discord", "github", "youtube", "twitch", "x", "paypal", "patreon", "buymeacoffee", "kofi", "crowdin", "gitlab", "gofundme"-->
-	<ExternalLink Type="github" Url="https://github.com/DillanStephenson/cs2-multiplayer" />
+	<ExternalLink Type="github" Url="https://github.com/DillanStephenson/Cities-Skylines-2---multiplayer-DEDICATED-SERVER" />
 	<!--Supported values Public, Private, Unlisted-->
 	<AccessLevel Value="Public" />
 </Publish>

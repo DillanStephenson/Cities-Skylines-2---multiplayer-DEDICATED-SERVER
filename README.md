@@ -43,7 +43,7 @@ This is what Host game starts. It shows who is on, the shared city and the last 
 
 ## Dedicated server
 
-The same program runs on a Linux or Windows box without the game installed. Download `cs2-multiplayer-server-<platform>-<version>.zip` from [Releases](https://github.com/DillanStephenson/cs2-multiplayer/releases). On Ubuntu:
+The same program runs on a Linux or Windows box without the game installed. Download `cs2-multiplayer-server-<platform>-<version>.zip` from [Releases](https://github.com/DillanStephenson/Cities-Skylines-2---multiplayer-DEDICATED-SERVER/releases). On Ubuntu:
 
 ```bash
 unzip cs2-multiplayer-server-linux-x64-*.zip -d /tmp/cs2mp
