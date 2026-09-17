@@ -448,7 +448,7 @@ namespace Multiplayer.Sync
     {
         private const int PassInterval = 60;
         private const int QuietPasses = 3;
-        private const int RetryTypesEvery = 600;
+        private const int RetryTypesEvery = 300;
         private const float ModEntityTolerance = 5f;
         private const int MaxMessageBytes = 256 * 1024;
         private const long ComplaintIntervalMs = 300000;
@@ -525,8 +525,9 @@ namespace Multiplayer.Sync
             }
 
             m_Frame++;
-            if (m_Unbound.Count > 0 && m_Frame % RetryTypesEvery == 0)
+            if (m_Unbound.Count > 0 && (m_Frame == 1 || m_Frame % RetryTypesEvery == 0))
             {
+                // Other mods load after this one, so their types are looked up once in a city and again now and then.
                 BindTypes();
             }
 

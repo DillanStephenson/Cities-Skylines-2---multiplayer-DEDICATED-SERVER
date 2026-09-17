@@ -29,6 +29,8 @@ Install the mod from Paradox Mods, then Main menu > Multiplayer.
 
 **Join game** connects to a friend or to a dedicated server. Joining from the main menu downloads the shared city and loads it. The host enters the owner key as well; nobody else needs it.
 
+**New city** (next to Join, needs the owner key) is how the host starts over, on any map: it connects and opens New Game instead of fetching the old city. Pick a map, start, and the new city goes up to the server as soon as it has loaded. Everyone else then joins as usual, or presses "Get the newer city" if they are still in the old one.
+
 In a city, the round button at the top of the right-hand stack opens the panel.
 
 ![In-game panel](docs/img/ingame-panel.png)

@@ -43,6 +43,8 @@ export const setJoinOwnerKey = (value: string) => trigger(GROUP, "setJoinOwnerKe
 
 export const host = () => trigger(GROUP, "host");
 export const join = () => trigger(GROUP, "join");
+/** Connect with the owner key and open New Game; the city started next replaces the one on the server. */
+export const joinNewCity = () => trigger(GROUP, "joinNewCity");
 export const leave = () => trigger(GROUP, "leave");
 export const uploadCity = () => trigger(GROUP, "uploadCity");
 export const fetchCity = () => trigger(GROUP, "fetchCity");

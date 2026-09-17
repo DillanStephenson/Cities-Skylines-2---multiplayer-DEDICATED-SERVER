@@ -25,6 +25,9 @@ namespace Multiplayer
         /// <summary>Once in a city and connected, give one junction a Traffic Tool Essentials pattern so the mod data sync sends it.</summary>
         public const string ModDataTestFile = "dev-moddata.txt";
 
+        /// <summary>Like dev-autojoin.txt, but through "New city": connect, then start a game on the first map and upload it.</summary>
+        public const string NewCityTestFile = "dev-newcity.txt";
+
         public static void Apply(MultiplayerService service, Setting settings)
         {
             if (service == null || settings == null)
@@ -60,6 +63,32 @@ namespace Multiplayer
                         Mod.log.Info(UiFile + " present: opening '" + view + "' once the menu (or the city) is up");
                         ui.RequestView(view);
                     }
+                }
+
+                string newCity = Path.Combine(directory, NewCityTestFile);
+                if (File.Exists(newCity))
+                {
+                    // Same three lines as dev-autojoin.txt; the game connects for a new city and starts one on the first map it has.
+                    string[] lines = File.ReadAllLines(newCity);
+                    if (lines.Length > 0 && lines[0].Trim().Length > 0)
+                    {
+                        settings.JoinAddress = lines[0].Trim();
+                    }
+
+                    if (lines.Length > 1)
+                    {
+                        settings.JoinPassword = lines[1].Trim();
+                    }
+
+                    if (lines.Length > 2)
+                    {
+                        settings.JoinOwnerKey = lines[2].Trim();
+                    }
+
+                    Mod.log.Info(NewCityTestFile + " present: connecting to " + settings.JoinAddress + " for a new city, which starts on its own");
+                    service.DevAutoStartNewCity = true;
+                    service.JoinForNewCity();
+                    return;
                 }
 
                 if (File.Exists(autoHost))

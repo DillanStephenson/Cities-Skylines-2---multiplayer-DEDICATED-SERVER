@@ -96,6 +96,7 @@ namespace Multiplayer
 
             AddBinding(new TriggerBinding(Group, "host", () => Mod.Service?.HostGame()));
             AddBinding(new TriggerBinding(Group, "join", () => Mod.Service?.JoinGame()));
+            AddBinding(new TriggerBinding(Group, "joinNewCity", () => Mod.Service?.JoinForNewCity()));
             AddBinding(new TriggerBinding(Group, "leave", () => Mod.Service?.Leave()));
             AddBinding(new TriggerBinding(Group, "uploadCity", () => Mod.Service?.UploadCityNow()));
             AddBinding(new TriggerBinding(Group, "fetchCity", () => Mod.Service?.FetchCityNow()));

@@ -32,6 +32,41 @@ namespace Multiplayer.Server
 
         public bool PanelMode => _panel;
 
+        // Windows consoles start in QuickEdit mode: one click selects text and every Console.Write blocks until
+        // the selection is dismissed, which stalls the whole server. Turned off; players can still Ctrl+C to quit.
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr GetStdHandle(int handle);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetConsoleMode(IntPtr handle, out uint mode);
+
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool SetConsoleMode(IntPtr handle, uint mode);
+
+        private static void DisableQuickEdit()
+        {
+            if (Environment.OSVersion.Platform != PlatformID.Win32NT)
+            {
+                return;
+            }
+
+            try
+            {
+                const int StdInput = -10;
+                const uint QuickEdit = 0x0040;
+                const uint ExtendedFlags = 0x0080;
+                IntPtr input = GetStdHandle(StdInput);
+                if (GetConsoleMode(input, out uint mode))
+                {
+                    SetConsoleMode(input, (mode & ~QuickEdit) | ExtendedFlags);
+                }
+            }
+            catch (Exception)
+            {
+                // Not a real console; nothing to do.
+            }
+        }
+
         public ConsoleView(bool plain)
         {
             _logo = Logo.Render(ProtocolConstants.ModVersion);
@@ -53,6 +88,7 @@ namespace Multiplayer.Server
 
             if (_panel)
             {
+                DisableQuickEdit();
                 try
                 {
                     Console.CursorVisible = true;

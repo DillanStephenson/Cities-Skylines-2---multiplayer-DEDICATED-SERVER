@@ -44,7 +44,8 @@ namespace Multiplayer.Core.Session
 
         public int HeartbeatIntervalMs = 2000;
 
-        public int TimeoutMs = 10000;
+        /// <summary>Silence tolerated before the link counts as dead; heartbeats go every 2 s, so this rides out a stalled window or a long game frame.</summary>
+        public int TimeoutMs = 30000;
 
         /// <summary>Kick a socket that has not handshaken in time.</summary>
         public int HandshakeTimeoutMs = 8000;

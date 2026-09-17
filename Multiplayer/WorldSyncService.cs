@@ -32,6 +32,11 @@ namespace Multiplayer
         private const string SaveNamePrefix = "MP ";
         private const int RetryDelayMs = 30000;
         private const int RegisterWaitFrames = 600;
+        private const int NewCityGraceMs = 10000;
+        private const int NewCityMaxTries = 5;
+
+        private long _newCityInGameSinceMs = -1;
+        private int _newCityTries;
 
         private readonly ClientSession _session;
         private readonly Setting _settings;
@@ -55,6 +60,12 @@ namespace Multiplayer
 
         /// <summary>Revision of the server world this game is running, 0 when it is not.</summary>
         public int LoadedRevision => _loadedRevision;
+
+        /// <summary>
+        /// Set when the host connected from the menu to start a fresh city: the server's current city is not fetched,
+        /// and the next city this game loads is uploaded to replace it.
+        /// </summary>
+        public bool NewCityPending { get; set; }
 
         public WorldSyncService(ClientSession session, Setting settings, ILog log, Action<string> note)
         {
@@ -108,6 +119,40 @@ namespace Multiplayer
             bool inGame = manager.gameMode == GameMode.Game;
             bool inMenu = manager.gameMode == GameMode.MainMenu;
             WorldInfo serverWorld = _session.ServerWorld;
+
+            if (NewCityPending)
+            {
+                if (!inGame)
+                {
+                    // Still in the menu, or loading: the server's city is deliberately not fetched.
+                    _newCityInGameSinceMs = -1;
+                    return;
+                }
+
+                if (_newCityInGameSinceMs < 0)
+                {
+                    _newCityInGameSinceMs = nowMs;
+                    return;
+                }
+
+                if (nowMs - _newCityInGameSinceMs < NewCityGraceMs)
+                {
+                    // A city that has just started cannot be saved for a few seconds (the game's save info is not ready).
+                    return;
+                }
+
+                if (_newCityTries >= NewCityMaxTries)
+                {
+                    NewCityPending = false;
+                    _newCityTries = 0;
+                    _note("New city: the upload kept failing; press Save to server once the city runs");
+                    return;
+                }
+
+                _newCityTries++;
+                StartUpload(nowMs, "new city for the server");
+                return;
+            }
 
             if (serverWorld != null && serverWorld.Revision != _loadedRevision)
             {
@@ -243,6 +288,8 @@ namespace Multiplayer
             {
                 _loadedRevision = revision;
                 _lastUploadMs = NowMs();
+                NewCityPending = false;
+                _newCityTries = 0;
                 _note("City uploaded as revision " + revision);
             }
             else
@@ -469,6 +516,12 @@ namespace Multiplayer
                 _lastUploadMs = -1;
                 _awaitingLoadRevision = 0;
                 _nextAttemptMs = 0;
+                if (state == SessionState.Offline || state == SessionState.Failed)
+                {
+                    // Set before connecting, so it must survive the Connecting and Handshaking steps.
+                    NewCityPending = false;
+                }
+
                 Idle();
             }
         }
@@ -498,6 +551,10 @@ namespace Multiplayer
                 {
                     builder.Append(' ').Append(100 * _downloadReceived / _downloadTotal).Append('%');
                 }
+            }
+            else if (NewCityPending)
+            {
+                builder.Append("New city: pick a map under New Game; the city you start goes to the server once it has loaded");
             }
             else if (!_session.ServerWorldKnown)
             {

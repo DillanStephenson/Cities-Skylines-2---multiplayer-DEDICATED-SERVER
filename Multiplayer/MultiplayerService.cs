@@ -372,11 +372,21 @@ namespace Multiplayer
                 return;
             }
 
-            _devModDataRequested = false;
             World world = World.DefaultGameObjectInjectionWorld;
             Sync.ModDataSyncSystem system = world != null ? world.GetExistingSystemManaged<Sync.ModDataSyncSystem>() : null;
-            Note("Dev mod data: " + (system != null ? system.DevSetTestPattern() : "sync system missing"));
+            string result = system != null ? system.DevSetTestPattern() : "sync system missing";
+            if (result.StartsWith("Traffic Tool Essentials is not loaded", StringComparison.Ordinal) && _devModDataTries++ < 30)
+            {
+                // Other mods' types are picked up a moment after the city loads; try again shortly.
+                _devModDataAtMs = Now + 2000;
+                return;
+            }
+
+            _devModDataRequested = false;
+            Note("Dev mod data: " + result);
         }
+
+        private int _devModDataTries;
 
         private void RunDevBuildIfDue()
         {
@@ -606,6 +616,126 @@ namespace Multiplayer
             Connect(host, port, _settings.JoinPassword, _settings.JoinOwnerKey);
         }
 
+        /// <summary>
+        /// Join as the host to start a fresh city: the server's city is not fetched; New Game opens instead, and the
+        /// city started there is uploaded as soon as it has loaded, replacing whatever the server held.
+        /// </summary>
+        public void JoinForNewCity()
+        {
+            if (IsOnline)
+            {
+                return;
+            }
+
+            if (_settings.JoinOwnerKey.Trim().Length == 0)
+            {
+                Note("New city needs the owner key: only the host can replace the server's city");
+                return;
+            }
+
+            if (!EndpointParser.TryParse(_settings.JoinAddress, ProtocolConstants.DefaultPort, out string host, out int port))
+            {
+                Note("Invalid address '" + _settings.JoinAddress + "'");
+                return;
+            }
+
+            WorldSync.NewCityPending = true;
+            Connect(host, port, _settings.JoinPassword, _settings.JoinOwnerKey);
+        }
+
+        /// <summary>Dev trigger: after "New city" connects, start a game on the first map the game has instead of waiting for a click.</summary>
+        public bool DevAutoStartNewCity { get; set; }
+
+        private long _devNewCityAtMs = -1;
+        private long _newGameScreenDueMs = -1;
+
+        /// <summary>Opens New Game as soon as the main menu is up (the dev trigger connects before it is).</summary>
+        private void OpenNewGameScreen()
+        {
+            _newGameScreenDueMs = Now;
+        }
+
+        private void RunNewGameScreenIfDue()
+        {
+            if (_newGameScreenDueMs < 0 || Now < _newGameScreenDueMs)
+            {
+                return;
+            }
+
+            if (!WorldSync.NewCityPending || Session.State != SessionState.Connected)
+            {
+                _newGameScreenDueMs = -1;
+                return;
+            }
+
+            GameManager manager = GameManager.instance;
+            if (manager == null || manager.gameMode != GameMode.MainMenu || manager.isGameLoading)
+            {
+                _newGameScreenDueMs = Now + 500;
+                return;
+            }
+
+            _newGameScreenDueMs = -1;
+            if (DevAutoStartNewCity)
+            {
+                _devNewCityAtMs = Now + 3000;
+                return;
+            }
+
+            World world = World.DefaultGameObjectInjectionWorld;
+            Game.UI.Menu.MenuUISystem menu = world != null ? world.GetExistingSystemManaged<Game.UI.Menu.MenuUISystem>() : null;
+            if (menu != null)
+            {
+                menu.activeScreen = Game.UI.Menu.MenuUISystem.MenuScreen.NewGame;
+            }
+        }
+
+        private void RunDevNewCityIfDue()
+        {
+            if (_devNewCityAtMs < 0 || Now < _devNewCityAtMs)
+            {
+                return;
+            }
+
+            _devNewCityAtMs = -1;
+            try
+            {
+                Game.Assets.MapMetadata map = null;
+                foreach (Game.Assets.MapMetadata candidate in Colossal.IO.AssetDatabase.AssetDatabase.global.GetAssets(default(Colossal.IO.AssetDatabase.SearchFilter<Game.Assets.MapMetadata>)))
+                {
+                    map = candidate;
+                    break;
+                }
+
+                if (map == null)
+                {
+                    Note("Dev new city: no map found");
+                    return;
+                }
+
+                Note("Dev new city: starting a game on map '" + map.name + "'");
+                // The New Game screen sets these before loading; without a starting year the clock cannot produce a date.
+                World world = World.DefaultGameObjectInjectionWorld;
+                Game.Simulation.TimeSystem time = world != null ? world.GetExistingSystemManaged<Game.Simulation.TimeSystem>() : null;
+                if (time != null)
+                {
+                    time.startingYear = DateTime.Now.Year;
+                }
+
+                GameManager.instance.Load(GameMode.Game, Colossal.Serialization.Entities.Purpose.NewGame, map).ContinueWith(task =>
+                {
+                    if (task.IsFaulted)
+                    {
+                        _log.Warn("Dev new city: load failed: " + task.Exception?.GetBaseException().Message);
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Note("Dev new city failed: " + ex.Message);
+            }
+        }
+
         public void Leave()
         {
             EndSession("Host closed the session", "Left the session");
@@ -657,6 +787,8 @@ namespace Multiplayer
                 WorldSync.Update(Now);
                 RunDevBuildIfDue();
                 RunDevModDataIfDue();
+                RunNewGameScreenIfDue();
+                RunDevNewCityIfDue();
             }
             catch (Exception ex)
             {
@@ -758,6 +890,20 @@ namespace Multiplayer
                 Note(hosting
                     ? "Hosting: server window is up, you are the owner (player " + Session.LocalPlayerId + ")"
                     : "Joined '" + Session.ServerName + "' as player " + Session.LocalPlayerId + (Session.IsOwner ? " (owner)" : ""));
+                if (WorldSync.NewCityPending)
+                {
+                    if (!Session.IsOwner)
+                    {
+                        WorldSync.NewCityPending = false;
+                        Note("New city needs the owner key; joined normally instead");
+                    }
+                    else
+                    {
+                        Note("Pick a map: the city you start replaces the one on the server once it has loaded");
+                        OpenNewGameScreen();
+                    }
+                }
+
                 return;
             }
 

@@ -141,12 +141,17 @@ const JoinForm = () => {
       <Field label="Password" value={password} secret placeholder="Leave empty if the server has none" onCommit={b.setJoinPassword} />
       <Field label="Owner key" value={ownerKey} secret placeholder="Only the host enters this" onCommit={b.setJoinOwnerKey} />
       <div className={styles.note}>
-        Joining from the main menu fetches the shared city automatically and loads it. The owner key makes you the session owner, who can upload a city and stop the server.
+        {"Join fetches the server's city and loads it. New city (owner key needed) connects and opens New Game instead: pick any map, and the city you start replaces the one on the server as soon as it has loaded."}
       </div>
       <div className={styles.actions}>
         {!online && (
           <Button variant="primary" className={styles.button} onSelect={b.join}>
             Join
+          </Button>
+        )}
+        {!online && ownerKey && (
+          <Button variant="flat" className={styles.button} onSelect={b.joinNewCity}>
+            New city
           </Button>
         )}
         {online && (
