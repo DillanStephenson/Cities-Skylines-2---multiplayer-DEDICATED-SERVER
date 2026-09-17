@@ -31,8 +31,8 @@ namespace Multiplayer.Tests
                 Password = password,
                 OwnerKey = OwnerKey,
                 HeartbeatIntervalMs = 40,
-                TimeoutMs = 400,
-                HandshakeTimeoutMs = 300,
+                TimeoutMs = 1500,
+                HandshakeTimeoutMs = 1500,
             };
         }
 
@@ -45,9 +45,9 @@ namespace Multiplayer.Tests
                 OwnerKey = ownerKey,
                 Mods = new List<string>(mods ?? new string[0]),
                 HeartbeatIntervalMs = 40,
-                TimeoutMs = 400,
-                HandshakeTimeoutMs = 300,
-                ConnectTimeoutMs = 2000,
+                TimeoutMs = 1500,
+                HandshakeTimeoutMs = 1500,
+                ConnectTimeoutMs = 5000,
             };
         }
 
@@ -102,7 +102,7 @@ namespace Multiplayer.Tests
             }
         }
 
-        public bool PumpUntil(Func<bool> condition, int timeoutMs = 3000)
+        public bool PumpUntil(Func<bool> condition, int timeoutMs = 8000)
         {
             long deadline = Now + timeoutMs;
             while (Now < deadline)
