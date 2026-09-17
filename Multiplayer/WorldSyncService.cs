@@ -13,6 +13,7 @@ using Game.Assets;
 using Game.SceneFlow;
 using Game.UI;
 using Game.UI.Menu;
+using Multiplayer.Core.Build;
 using Multiplayer.Core.Session;
 using Unity.Entities;
 
@@ -57,6 +58,113 @@ namespace Multiplayer
 
             ResyncPending = true;
             RefreshStatus();
+        }
+
+        // ---------------------------------------------------------------- forced group sync
+
+        private const long ForcedSyncWaitLimitMs = 150000;
+        private long _lastForcedSyncMs = -1;
+        private long _forcedSyncSinceMs = -1;
+        private bool _forcedSyncUpload;
+        private bool _forcedSyncWaiting;
+
+        /// <summary>Text of the full-screen "Syncing world" box while a forced sync is under way; empty when hidden.</summary>
+        public string SyncModalText { get; private set; } = string.Empty;
+
+        /// <summary>True while other players' builds must not be replayed here: a fresh save is on its way.</summary>
+        public bool HoldReplays => ResyncPending || _forcedSyncWaiting;
+
+        /// <summary>
+        /// Leader only: everyone stops behind a sync box, this game saves and uploads, and once the server has
+        /// it everyone else loads that revision. Scheduled by the setting or pressed in the panel.
+        /// </summary>
+        public bool ForceSyncNow(long nowMs)
+        {
+            GameManager manager = GameManager.instance;
+            if (!_session.IsLeader || _session.State != SessionState.Connected || _busy || manager == null || manager.gameMode != GameMode.Game || manager.isGameLoading)
+            {
+                return false;
+            }
+
+            _lastForcedSyncMs = nowMs;
+            _forcedSyncUpload = true;
+            SyncModalText = "Saving the shared city and sending it to everyone. Hold on.";
+            _sendSync(new WorldSyncCommand { Phase = WorldSyncPhase.Start });
+            StartUpload(nowMs, "forced sync of everyone");
+            return true;
+        }
+
+        private Action<WorldSyncCommand> _sendSync = command => { };
+
+        /// <summary>How the service sends world sync notices; set once by the service.</summary>
+        public void SetSyncSender(Action<WorldSyncCommand> sender)
+        {
+            _sendSync = sender ?? (command => { });
+        }
+
+        /// <summary>A forced sync notice from the leader.</summary>
+        public void OnWorldSync(WorldSyncCommand command, long nowMs)
+        {
+            if (_session.IsLeader)
+            {
+                return;
+            }
+
+            switch (command.Phase)
+            {
+                case WorldSyncPhase.Start:
+                    _forcedSyncWaiting = true;
+                    _forcedSyncSinceMs = nowMs;
+                    SyncModalText = "The host is saving the shared city. It loads here as soon as it arrives.";
+                    _note("Syncing world: waiting for the host's save");
+                    break;
+
+                case WorldSyncPhase.Ready:
+                    _forcedSyncWaiting = false;
+                    if (command.Revision != 0 && command.Revision == _loadedRevision)
+                    {
+                        SyncModalText = string.Empty;
+                        _note("Syncing world: already on revision " + command.Revision);
+                        break;
+                    }
+
+                    SyncModalText = "Loading the shared city, revision " + command.Revision + ".";
+                    ResyncPending = true;
+                    _nextAttemptMs = 0;
+                    break;
+
+                case WorldSyncPhase.Cancel:
+                    _forcedSyncWaiting = false;
+                    SyncModalText = string.Empty;
+                    _note("Syncing world: the host's save did not happen; carrying on");
+                    break;
+            }
+
+            RefreshStatus();
+        }
+
+        private void UpdateForcedSync(long nowMs, bool inGame)
+        {
+            if (_forcedSyncWaiting && nowMs - _forcedSyncSinceMs > ForcedSyncWaitLimitMs)
+            {
+                _forcedSyncWaiting = false;
+                SyncModalText = string.Empty;
+                _note("Syncing world: no save arrived from the host; carrying on");
+            }
+
+            int minutes = _settings.SyncEveryMinutes;
+            if (minutes > 0 && _session.IsLeader && inGame && _loadedRevision != 0 && !_busy)
+            {
+                long since = _lastForcedSyncMs >= 0 ? _lastForcedSyncMs : _lastUploadMs;
+                if (since >= 0 && nowMs - since > minutes * 60000L)
+                {
+                    ForceSyncNow(nowMs);
+                }
+                else if (since < 0)
+                {
+                    _lastForcedSyncMs = nowMs;
+                }
+            }
         }
 
         /// <summary>The leader was asked for a fresh save by someone who fell out of step: upload now, at most every 30 s.</summary>
@@ -170,6 +278,9 @@ namespace Multiplayer
                     gameManager.onGameLoadingComplete += OnGameLoadingComplete;
                 }
             }
+
+            GameManager currentManager = GameManager.instance;
+            UpdateForcedSync(nowMs, currentManager != null && currentManager.gameMode == GameMode.Game && !currentManager.isGameLoading);
 
             if (_session.State != SessionState.Connected || _busy || !_session.ServerWorldKnown || nowMs < _nextAttemptMs)
             {
@@ -371,6 +482,12 @@ namespace Multiplayer
             {
                 _log.Error("Upload failed: " + ex);
                 _note("Upload failed: " + ex.Message);
+                if (_forcedSyncUpload)
+                {
+                    _forcedSyncUpload = false;
+                    SyncModalText = string.Empty;
+                    _sendSync(new WorldSyncCommand { Phase = WorldSyncPhase.Cancel });
+                }
                 Idle();
             }
         }
@@ -384,10 +501,23 @@ namespace Multiplayer
                 NewCityPending = false;
                 _newCityTries = 0;
                 _note("City uploaded as revision " + revision);
+                if (_forcedSyncUpload)
+                {
+                    _forcedSyncUpload = false;
+                    SyncModalText = string.Empty;
+                    _sendSync(new WorldSyncCommand { Phase = WorldSyncPhase.Ready, Revision = revision });
+                    _note("Syncing world: everyone loads revision " + revision);
+                }
             }
             else
             {
                 _note("Upload rejected: " + reason);
+                if (_forcedSyncUpload)
+                {
+                    _forcedSyncUpload = false;
+                    SyncModalText = string.Empty;
+                    _sendSync(new WorldSyncCommand { Phase = WorldSyncPhase.Cancel });
+                }
             }
 
             Idle();
@@ -532,10 +662,12 @@ namespace Multiplayer
                 _loadedRevision = _awaitingLoadRevision;
                 _lastUploadMs = NowMs();
                 ResyncPending = false;
+                SyncModalText = string.Empty;
                 _note("Now playing the shared city, revision " + _loadedRevision);
             }
             else
             {
+                SyncModalText = string.Empty;
                 _note("The shared city did not load (game went to " + mode + ")");
             }
 
@@ -620,6 +752,10 @@ namespace Multiplayer
                 _hostChoiceAsked = false;
                 ResyncPending = false;
                 _lastAskedUploadMs = -1;
+                _forcedSyncWaiting = false;
+                _forcedSyncUpload = false;
+                _lastForcedSyncMs = -1;
+                SyncModalText = string.Empty;
 
                 Idle();
             }

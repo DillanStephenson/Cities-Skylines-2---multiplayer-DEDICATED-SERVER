@@ -40,6 +40,8 @@ namespace Multiplayer
         private ValueBinding<bool> m_NewerCity;
         private ValueBinding<bool> m_HostChoice;
         private ValueBinding<bool> m_PanelOpen;
+        private ValueBinding<string> m_SyncModal;
+        private ValueBinding<bool> m_IsLeader;
         private int m_LastToggleTick;
 
         /// <summary>The toolbar button (or the panel's close cross) was clicked. Two toggles within a blink count as one click.</summary>
@@ -102,6 +104,9 @@ namespace Multiplayer
             AddBinding(m_HostChoice = new ValueBinding<bool>(Group, "hostChoice", false));
             AddBinding(m_PanelOpen = new ValueBinding<bool>(Group, "panelOpen", false));
             AddBinding(new TriggerBinding(Group, "togglePanel", TogglePanel));
+            AddBinding(m_SyncModal = new ValueBinding<string>(Group, "syncModal", string.Empty));
+            AddBinding(m_IsLeader = new ValueBinding<bool>(Group, "isLeader", false));
+            AddBinding(new TriggerBinding(Group, "syncNow", () => Mod.Service?.ForceSyncNow()));
             AddBinding(m_RequestedView = new ValueBinding<string>(Group, "requestedView", string.Empty));
             AddBinding(m_TransferBusy = new ValueBinding<bool>(Group, "transferBusy", false));
             AddBinding(m_Presence = new ValueBinding<string>(Group, "presence", string.Empty));
@@ -200,6 +205,8 @@ namespace Multiplayer
             }
 
             m_HostChoice.Update(hostChoice);
+            m_SyncModal.Update(inGame ? service.WorldSync.SyncModalText ?? string.Empty : string.Empty);
+            m_IsLeader.Update(service.IsLeader);
             m_TransferBusy.Update(service.WorldSync.IsBusy);
         }
 

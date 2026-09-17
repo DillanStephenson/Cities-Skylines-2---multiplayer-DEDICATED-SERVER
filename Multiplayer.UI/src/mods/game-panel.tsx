@@ -42,6 +42,7 @@ export const GamePanel = () => {
   const recent = useValue(b.recent$);
   const joinAddress = useValue(b.joinAddress$);
   const busy = useValue(b.transferBusy$);
+  const isLeader = useValue(b.isLeader$);
   if (!open) {
     return null;
   }
@@ -98,6 +99,11 @@ export const GamePanel = () => {
         {online && newerCity && (
           <Button variant="primary" className={styles.gameButton} disabled={busy} onSelect={b.fetchCity}>
             Get the newer city
+          </Button>
+        )}
+        {online && isLeader && (
+          <Button variant="flat" className={styles.gameButtonQuiet} disabled={busy} onSelect={b.syncNow}>
+            Sync everyone now
           </Button>
         )}
         {online && (

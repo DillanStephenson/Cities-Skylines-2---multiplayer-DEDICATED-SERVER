@@ -32,6 +32,12 @@ export const transferBusy$ = bindValue<boolean>(GROUP, "transferBusy", false);
 /** "join", "host", "choice" or "panel" when the C# side wants a screen opened without a click (dev trigger). */
 export const requestedView$ = bindValue<string>(GROUP, "requestedView", "");
 
+/** Text of the full-screen "Syncing world" box; empty when there is nothing to show. */
+export const syncModal$ = bindValue<string>(GROUP, "syncModal", "");
+/** True when this player is the source of truth: the host, or the longest-connected player without one. */
+export const isLeader$ = bindValue<boolean>(GROUP, "isLeader", false);
+export const syncNow = () => trigger(GROUP, "syncNow");
+
 /** Whether the in-game panel is open. Kept on the C# side so the toolbar button and the panel always agree. */
 export const panelOpen$ = bindValue<boolean>(GROUP, "panelOpen", false);
 export const togglePanel = () => trigger(GROUP, "togglePanel");

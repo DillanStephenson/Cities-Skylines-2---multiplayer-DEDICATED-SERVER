@@ -324,6 +324,61 @@
   color: rgba(157, 193, 222, 0.8);
 }
 
+// ---------------------------------------------------------------- syncing world box
+
+.syncBackdrop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+  z-index: 1000;
+}
+
+.syncBox {
+  width: 520rem;
+  padding: 28rem 32rem 30rem;
+  border-radius: 10rem;
+  background-color: rgba(6, 26, 64, 0.97);
+  border: 2rem solid rgba(157, 193, 222, 0.35);
+  color: rgba(255, 255, 255, 0.92);
+  text-align: center;
+}
+
+.syncTitle {
+  font-size: 30rem;
+  letter-spacing: 1rem;
+  text-transform: uppercase;
+  margin-bottom: 14rem;
+}
+
+.syncText {
+  font-size: 16rem;
+  line-height: 24rem;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 20rem;
+}
+
+.syncSpinner {
+  width: 40rem;
+  height: 40rem;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 4rem solid rgba(157, 193, 222, 0.25);
+  border-top-color: #72c8f0;
+  animation: syncSpin 1s linear infinite;
+}
+
+@keyframes syncSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 // ---------------------------------------------------------------- other players' name tags
 
 .presenceLayer {

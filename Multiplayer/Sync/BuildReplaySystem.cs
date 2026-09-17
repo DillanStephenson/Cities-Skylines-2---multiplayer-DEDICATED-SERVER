@@ -89,7 +89,7 @@ namespace Multiplayer.Sync
         public void Enqueue(BuildCommand command, int fromPlayer, bool captureAnyway = false)
         {
             MultiplayerService service = Mod.Service;
-            if (service != null && service.WorldSync.ResyncPending && !captureAnyway)
+            if (service != null && service.WorldSync.HoldReplays && !captureAnyway)
             {
                 // This city has drifted and a fresh save is on its way; replaying into it now only makes it worse.
                 Mod.log.Info("Not replaying " + command + " from player " + fromPlayer + ": waiting for the fresh save");

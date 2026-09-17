@@ -88,6 +88,7 @@ namespace Multiplayer
             Session.GameplayCommandReceived += OnGameplayCommand;
 
             WorldSync = new WorldSyncService(Session, settings, log, Note);
+            WorldSync.SetSyncSender(command => Session.SendGameplayCommand(WorldSyncCommand.Kind, command.ToBytes()));
 
             RefreshStatus();
         }
@@ -239,6 +240,23 @@ namespace Multiplayer
 
         private void OnGameplayCommand(GameplayCommandMessage message)
         {
+            if (message.Kind == WorldSyncCommand.Kind)
+            {
+                try
+                {
+                    WorldSyncCommand sync = WorldSyncCommand.FromBytes(message.Payload);
+                    _log.Info("Received " + sync + " from " + PlayerName(message.OriginPlayerId));
+                    WorldSync.OnWorldSync(sync, Now);
+                    RefreshStatus();
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn("Bad world sync from player " + message.OriginPlayerId + ": " + ex.Message);
+                }
+
+                return;
+            }
+
             if (message.Kind == SaveNowKind)
             {
                 if (IsLeader)
@@ -651,6 +669,23 @@ namespace Multiplayer
 
             _devStep++;
             _devNextAtMs = Now + 6000;
+        }
+
+        /// <summary>Panel button, leader only: everyone stops behind a sync box, this city goes up, everyone else loads it.</summary>
+        public void ForceSyncNow()
+        {
+            if (!IsLeader)
+            {
+                Note("Only the host (or the longest-connected player without one) can sync everyone");
+                return;
+            }
+
+            if (!WorldSync.ForceSyncNow(Now))
+            {
+                Note("Cannot sync everyone right now (busy, or not in a city)");
+            }
+
+            RefreshStatus();
         }
 
         /// <summary>Settings button: the host pushes the city they are playing to the server.</summary>
