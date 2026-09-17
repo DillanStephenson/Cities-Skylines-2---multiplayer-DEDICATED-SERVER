@@ -51,23 +51,24 @@ namespace Multiplayer.Sync
             dependencies.Complete();
             TerrainHeightData heights = m_Terrain.GetHeightData();
 
-            // What the others are about to place: their tool's ghost, in their colour.
+            // What the others are about to place: their tool's ghost as a thin dashed outline in their colour, never
+            // filled, so it cannot be mistaken for the game's own green placement preview.
             foreach (RemotePreview remote in previews)
             {
                 Color color = PresenceStore.ColorFor(remote.PlayerId);
-                var fill = new Color(color.r, color.g, color.b, 0.35f);
-                var deleting = new Color(1f, 0.25f, 0.2f, 0.45f);
+                var line = new Color(color.r, color.g, color.b, 0.85f);
+                var deleting = new Color(1f, 0.3f, 0.25f, 0.85f);
                 PreviewCommand preview = remote.Preview;
                 foreach (PreviewCurve curve in preview.Curves)
                 {
                     var bezier = new Bezier4x3(EntityResolver.ToFloat3(curve.A), EntityResolver.ToFloat3(curve.B), EntityResolver.ToFloat3(curve.C), EntityResolver.ToFloat3(curve.D));
-                    buffer.DrawCurve(color, curve.Deleting ? deleting : fill, 1f, OverlayRenderSystem.StyleFlags.Projected, bezier, math.clamp(curve.Width, 2f, 60f));
+                    buffer.DrawDashedCurve(curve.Deleting ? deleting : line, bezier, 1.5f, 5f, 3f);
                 }
 
                 foreach (PreviewPoint point in preview.Points)
                 {
                     float3 position = OnGround(ref heights, EntityResolver.ToFloat3(point.Position));
-                    buffer.DrawCircle(color, point.Deleting ? deleting : fill, 1f, OverlayRenderSystem.StyleFlags.Projected, new float2(0f, 1f), position, math.clamp(point.Radius * 2f, 4f, 200f));
+                    buffer.DrawCircle(point.Deleting ? deleting : line, new Color(0f, 0f, 0f, 0f), 1.5f, OverlayRenderSystem.StyleFlags.Projected, new float2(0f, 1f), position, math.clamp(point.Radius * 2f, 4f, 200f));
                 }
 
                 foreach (PreviewLoop loop in preview.Loops)
@@ -76,7 +77,7 @@ namespace Multiplayer.Sync
                     {
                         float3 from = OnGround(ref heights, EntityResolver.ToFloat3(loop.Nodes[n]));
                         float3 to = OnGround(ref heights, EntityResolver.ToFloat3(loop.Nodes[(n + 1) % loop.Nodes.Count]));
-                        buffer.DrawLine(color, new Line3.Segment(from, to), 2f);
+                        buffer.DrawDashedLine(line, new Line3.Segment(from, to), 1.5f, 5f, 3f);
                     }
                 }
             }
