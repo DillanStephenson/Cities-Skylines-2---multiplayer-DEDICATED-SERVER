@@ -85,7 +85,12 @@ namespace Multiplayer
                         settings.JoinOwnerKey = lines[2].Trim();
                     }
 
-                    Mod.log.Info(NewCityTestFile + " present: connecting to " + settings.JoinAddress + " for a new city, which starts on its own");
+                    // Lines 4-6 (optional): part of the map name, the city name, options such as "unlockMapTiles,unlimitedMoney".
+                    service.DevNewCityMap = lines.Length > 3 ? lines[3].Trim() : string.Empty;
+                    service.DevNewCityName = lines.Length > 4 ? lines[4].Trim() : string.Empty;
+                    service.DevNewCityOptions = lines.Length > 5 ? lines[5].Trim() : string.Empty;
+                    Mod.log.Info(NewCityTestFile + " present: connecting to " + settings.JoinAddress + " for a new city, which starts on its own"
+                        + (service.DevNewCityMap.Length > 0 ? " on map '" + service.DevNewCityMap + "'" : "") + (service.DevNewCityOptions.Length > 0 ? " with " + service.DevNewCityOptions : ""));
                     service.DevAutoStartNewCity = true;
                     service.JoinForNewCity();
                     return;

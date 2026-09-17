@@ -643,8 +643,17 @@ namespace Multiplayer
             Connect(host, port, _settings.JoinPassword, _settings.JoinOwnerKey);
         }
 
-        /// <summary>Dev trigger: after "New city" connects, start a game on the first map the game has instead of waiting for a click.</summary>
+        /// <summary>Dev trigger: after "New city" connects, start a game on a map instead of waiting for a click.</summary>
         public bool DevAutoStartNewCity { get; set; }
+
+        /// <summary>Dev trigger: part of the map's name to start on (empty = the first map).</summary>
+        public string DevNewCityMap { get; set; } = string.Empty;
+
+        /// <summary>Dev trigger: the new city's name (empty = the map's name).</summary>
+        public string DevNewCityName { get; set; } = string.Empty;
+
+        /// <summary>Dev trigger: comma-separated new-game options: unlockMapTiles, unlimitedMoney, unlockAll, disasters, leftHand.</summary>
+        public string DevNewCityOptions { get; set; } = string.Empty;
 
         private long _devNewCityAtMs = -1;
         private long _newGameScreenDueMs = -1;
@@ -701,27 +710,58 @@ namespace Multiplayer
             try
             {
                 Game.Assets.MapMetadata map = null;
+                var names = new List<string>();
                 foreach (Game.Assets.MapMetadata candidate in Colossal.IO.AssetDatabase.AssetDatabase.global.GetAssets(default(Colossal.IO.AssetDatabase.SearchFilter<Game.Assets.MapMetadata>)))
                 {
-                    map = candidate;
-                    break;
+                    string display = candidate.target != null && !string.IsNullOrEmpty(candidate.target.displayName) ? candidate.target.displayName : candidate.name;
+                    names.Add(display);
+                    bool wanted = DevNewCityMap.Length == 0
+                        || display.IndexOf(DevNewCityMap, StringComparison.OrdinalIgnoreCase) >= 0
+                        || candidate.name.IndexOf(DevNewCityMap, StringComparison.OrdinalIgnoreCase) >= 0;
+                    if (wanted && map == null)
+                    {
+                        map = candidate;
+                    }
                 }
 
                 if (map == null)
                 {
-                    Note("Dev new city: no map found");
+                    Note("Dev new city: map '" + DevNewCityMap + "' not found; maps here: " + string.Join(", ", names.ToArray()));
                     return;
                 }
 
-                Note("Dev new city: starting a game on map '" + map.name + "'");
-                // The New Game screen sets these before loading; without a starting year the clock cannot produce a date.
+                // What the New Game screen sets before loading: map name and prefabs, city options, the clock's starting year.
                 World world = World.DefaultGameObjectInjectionWorld;
-                Game.Simulation.TimeSystem time = world != null ? world.GetExistingSystemManaged<Game.Simulation.TimeSystem>() : null;
-                if (time != null)
+                Game.Assets.MapInfo info = map.target;
+                Game.UI.MapMetadataSystem maps = world.GetExistingSystemManaged<Game.UI.MapMetadataSystem>();
+                if (maps != null && info != null)
                 {
-                    time.startingYear = DateTime.Now.Year;
+                    maps.mapName = info.displayName;
+                    maps.prefabReferences = info.prefabReferences;
                 }
 
+                Game.City.CityConfigurationSystem config = world.GetExistingSystemManaged<Game.City.CityConfigurationSystem>();
+                string options = DevNewCityOptions.ToLowerInvariant();
+                if (config != null)
+                {
+                    config.overrideLoadedOptions = true;
+                    config.overrideCityName = DevNewCityName.Length > 0 ? DevNewCityName : (info != null ? info.displayName : "New city");
+                    config.overrideThemeName = info != null ? info.theme : null;
+                    config.overrideUnlockMapTiles = options.Contains("unlockmaptiles") || options.Contains("alltiles");
+                    config.overrideUnlimitedMoney = options.Contains("unlimitedmoney");
+                    config.overrideUnlockAll = options.Contains("unlockall");
+                    config.overrideNaturalDisasters = options.Contains("disasters");
+                    config.overrideLeftHandTraffic = options.Contains("lefthand");
+                }
+
+                Game.Simulation.TimeSystem time = world.GetExistingSystemManaged<Game.Simulation.TimeSystem>();
+                if (time != null)
+                {
+                    time.startingYear = info != null && info.startingYear != -1 ? info.startingYear : DateTime.Now.Year;
+                }
+
+                Note("Dev new city: starting '" + (config != null ? config.overrideCityName : "?") + "' on map '" + (info != null ? info.displayName : map.name) + "'"
+                    + (config != null && config.overrideUnlockMapTiles ? ", all map tiles unlocked" : "") + (config != null && config.overrideUnlimitedMoney ? ", unlimited money" : ""));
                 GameManager.instance.Load(GameMode.Game, Colossal.Serialization.Entities.Purpose.NewGame, map).ContinueWith(task =>
                 {
                     if (task.IsFaulted)
