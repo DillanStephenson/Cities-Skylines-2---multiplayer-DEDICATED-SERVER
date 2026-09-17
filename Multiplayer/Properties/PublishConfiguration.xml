@@ -4,29 +4,52 @@
 	<!--Name of the mod to display to players-->
 	<DisplayName Value="Multiplayer Co-op" />
 	<!--Short description of the mod-->
-	<ShortDescription Value="Build one city together. Roads, zoning, terrain and policies sync live; a small server window (or a Linux server) holds the shared city." />
+	<ShortDescription Value="Build one city together over a dedicated server. Roads, zoning, terrain, policies, progression and mod settings sync live; a small server program holds the shared city on your PC or on a Linux box." />
 	<!--Long description of the mod. Single line or multi line. Supports minimal markdown subset-->
 	<LongDescription>
-Co-op multiplayer for Cities: Skylines II built around a **server window**: a small console app that holds the shared city and relays what everyone does.
+Build one city with friends. A small server program holds the shared city and passes round what everyone does; the game talks to it through this mod. Run the server from your own PC with one click, or put it on a Linux or Windows box and leave it running for your group.
 
-**How it works**
-- Main menu > **Multiplayer**. **Host game** opens the server window next to your game and joins it; friends join your address and port. **Join game** connects to a friend or to a dedicated server.
-- Joining fetches the shared city and loads it. Anyone can save the city to the server from the in-game panel (bottom-right button); the host also saves automatically every few minutes.
-- What anyone builds, zones, bulldozes, terraforms or sets in a panel (taxes, budgets, fees, policies, building options) shows up on every PC live, and everyone shares one treasury. You see where the other players are on the map.
-- The simulation itself runs per PC, so citizens and traffic can differ a little; a save from anyone brings the others back in line.
+**What syncs live**
+- Roads, buildings, zoning, bulldozing, terrain, districts and transit lines appear on everyone's screen as they are placed. You also see the other players' tool ghosts: the road they are dragging out, the building under their cursor, the area they are drawing.
+- Taxes, budgets, service fees, city policies and building options.
+- Progression: a development node one player buys is bought for everyone, and the host's XP and development points are shared, so milestones arrive together.
+- One treasury. The host's balance is the city's balance.
+- Where everyone is: a ring where each player is looking, a dot under their mouse, their name over it.
+- Other mods' settings: Traffic Tool Essentials junction settings, the Traffic mod's lane connections and priority signs, and Road Builder's custom roads.
 
-**Mods**
-Any mod is allowed as long as everyone runs the same playset. The server compares mod lists (ignoring version numbers) and tells a rejected player which playset to activate. A dedicated server can follow a published Paradox playset by itself.
+Farms, forestry, mines and oil fields are the one thing not sent live yet; they arrive with the next save.
+
+**How a session works**
+Main menu > **Multiplayer**. **Host game** starts the server window next to your game and joins it; friends join your address and port (27015 unless you change it, forwarded on your router). **Join game** connects to a friend or to a dedicated server. Joining from the menu downloads the shared city and loads it.
+
+In a city, the round button at the top of the right-hand stack opens the panel: save to the server, fetch the newer city, see who is on. Anyone can save. The host also saves on its own every few minutes, and whoever joins later gets the latest save.
+
+When the host connects and the server already holds a city, the game asks: load last save, or new world. New world opens the map list, mod maps included, and the city you start replaces the one on the server.
+
+The simulation itself still runs on each PC, so citizens and traffic are not identical everywhere. Everything you build is.
 
 **Dedicated server**
-The same window runs on a Linux or Windows box without the game. Downloads and setup notes are on GitHub.
+This is a dedicated-server mod. The server is a separate program, not the game, so it runs on a box without Cities: Skylines II installed. The same program that Host game opens is on GitHub as a download for Linux and Windows, with an install script that sets it up as a service. All settings sit in one server.json file (name, password, owner key, mod check, welcome message) and the server picks up edits on its own. It can follow a public Paradox playset and tell anyone it turns away exactly which mods they are missing, and it checks GitHub for newer releases.
 
-Early access: play with people you know, keep regular saves, and report problems on GitHub.
+Server downloads, source code and issues: github.com/DillanStephenson/Cities-Skylines-2---multiplayer-DEDICATED-SERVER
+
+**Mods**
+Any mod is fine as long as everyone runs the same playset. The server compares mod lists, ignoring version numbers, and tells a rejected player which playset to activate.
+
+**Credits**
+Made by Dillan Stephenson. Testing: Mayor William. Thanks to the makers of Traffic Tool Essentials, Traffic and Road Builder, whose mods this one learned to carry along.
+
+Early access: play with people you know, keep your own saves, and report problems on GitHub.
 	</LongDescription>
 	<!--Thumbnail-->
 	<Thumbnail Value="Properties/Thumbnail.png" />
 	<!--Screenshot, can be set multiple times-->
-	<Screenshot Value="" />
+	<Screenshot Value="../docs/img/menu.jpg" />
+	<Screenshot Value="../docs/img/choice.jpg" />
+	<Screenshot Value="../docs/img/host.jpg" />
+	<Screenshot Value="../docs/img/ingame.jpg" />
+	<Screenshot Value="../docs/img/marker.jpg" />
+	<Screenshot Value="../docs/img/server.png" />
 	<!--Tag, can be set multiple times-->
 	<Tag Value="Code Mod" />
 	<!--Link to the forum post where the mod can be discussed-->
