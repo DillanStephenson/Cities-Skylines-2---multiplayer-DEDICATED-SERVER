@@ -50,6 +50,9 @@ namespace Multiplayer
 
         public string StatusLine { get; private set; } = string.Empty;
 
+        /// <summary>True while a save-and-upload or a download-and-load is in flight.</summary>
+        public bool IsBusy => _busy;
+
         /// <summary>Revision of the server world this game is running, 0 when it is not.</summary>
         public int LoadedRevision => _loadedRevision;
 

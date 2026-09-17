@@ -23,6 +23,10 @@ export const worldStatus$ = bindValue<string>(GROUP, "worldStatus", "");
 export const lastError$ = bindValue<string>(GROUP, "lastError", "");
 export const recent$ = bindValue<string>(GROUP, "recent", "");
 export const newerCity$ = bindValue<boolean>(GROUP, "newerCity", false);
+/** True while the city is being saved and uploaded, or downloaded and loaded. */
+export const transferBusy$ = bindValue<boolean>(GROUP, "transferBusy", false);
+/** "join", "host", "choice" or "panel" when the C# side wants a screen opened without a click (dev trigger). */
+export const requestedView$ = bindValue<string>(GROUP, "requestedView", "");
 
 /** UI-only: whether the in-game panel is open. Shared between the toolbar button and the panel. */
 export const panelOpen$ = bindLocalValue<boolean>(false);

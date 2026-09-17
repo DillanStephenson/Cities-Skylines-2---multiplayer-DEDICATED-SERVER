@@ -19,6 +19,9 @@ namespace Multiplayer
         /// <summary>Once in a city and connected, build a short test road through the replay engine and broadcast it.</summary>
         public const string BuildTestFile = "dev-build.txt";
 
+        /// <summary>Opens a screen without clicking, for screenshots: "choice", "join" or "host" (main menu) or "panel" (in a city).</summary>
+        public const string UiFile = "dev-ui.txt";
+
         public static void Apply(MultiplayerService service, Setting settings)
         {
             if (service == null || settings == null)
@@ -36,6 +39,18 @@ namespace Multiplayer
                 {
                     Mod.log.Info(BuildTestFile + " present: a test road will be built once in a city and connected");
                     service.RequestDevBuild();
+                }
+
+                string uiFile = Path.Combine(directory, UiFile);
+                if (File.Exists(uiFile))
+                {
+                    string view = File.ReadAllText(uiFile).Trim().ToLowerInvariant();
+                    var ui = Unity.Entities.World.DefaultGameObjectInjectionWorld?.GetExistingSystemManaged<MultiplayerUISystem>();
+                    if (ui != null && view.Length > 0)
+                    {
+                        Mod.log.Info(UiFile + " present: opening '" + view + "' once the menu (or the city) is up");
+                        ui.RequestView(view);
+                    }
                 }
 
                 if (File.Exists(autoHost))

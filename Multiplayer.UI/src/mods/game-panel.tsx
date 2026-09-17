@@ -1,5 +1,6 @@
 import { useValue } from "cs2/api";
 import { Button } from "cs2/ui";
+import { useEffect } from "react";
 import * as b from "./bindings";
 import styles from "./multiplayer.module.scss";
 
@@ -7,6 +8,12 @@ import styles from "./multiplayer.module.scss";
 export const GameToolbarButton = () => {
   const online = useValue(b.online$);
   const open = useValue(b.panelOpen$);
+  const requested = useValue(b.requestedView$);
+  useEffect(() => {
+    if (requested === "panel") {
+      b.panelOpen$.update(true);
+    }
+  }, [requested]);
   return (
     <Button variant="floating" className={open ? styles.gameToggle + " " + styles.gameToggleOpen : styles.gameToggle} onSelect={b.togglePanel} tooltipLabel="Multiplayer">
       <img src="Media/Glyphs/Passenger.svg" className={styles.gameToggleIcon} />
@@ -28,13 +35,13 @@ export const GamePanel = () => {
   const newerCity = useValue(b.newerCity$);
   const recent = useValue(b.recent$);
   const joinAddress = useValue(b.joinAddress$);
+  const busy = useValue(b.transferBusy$);
   if (!open) {
     return null;
   }
 
   const playerLines = players ? players.split("\n") : [];
   const recentLines = recent ? recent.split("\n").slice(-4) : [];
-  const busy = worldStatus.length > 0;
 
   return (
     <div className={styles.gamePanel} onMouseDown={(e) => e.stopPropagation()}>

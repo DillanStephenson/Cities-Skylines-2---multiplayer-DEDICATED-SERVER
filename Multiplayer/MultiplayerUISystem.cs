@@ -38,7 +38,24 @@ namespace Multiplayer
         private ValueBinding<string> m_LastError;
         private ValueBinding<string> m_Recent;
         private ValueBinding<bool> m_NewerCity;
+        private ValueBinding<string> m_RequestedView;
+        private ValueBinding<bool> m_TransferBusy;
+        private string m_PendingView;
+        private int m_PendingFrames;
         private int m_Frame;
+
+        /// <summary>Frames to let the main menu settle before a requested screen is opened (about ten seconds).</summary>
+        private const int OpenDelayFrames = 600;
+
+        /// <summary>
+        /// Open a screen without a click: "choice", "join" or "host" open the menu screen on that view once
+        /// the main menu is up; "panel" opens the in-game panel. Used by the dev trigger for screenshots.
+        /// </summary>
+        public void RequestView(string view)
+        {
+            m_PendingView = (view ?? string.Empty).Trim().ToLowerInvariant();
+            m_PendingFrames = 0;
+        }
 
         protected override void OnCreate()
         {
@@ -64,6 +81,8 @@ namespace Multiplayer
             AddBinding(m_LastError = new ValueBinding<string>(Group, "lastError", string.Empty));
             AddBinding(m_Recent = new ValueBinding<string>(Group, "recent", string.Empty));
             AddBinding(m_NewerCity = new ValueBinding<bool>(Group, "newerCity", false));
+            AddBinding(m_RequestedView = new ValueBinding<string>(Group, "requestedView", string.Empty));
+            AddBinding(m_TransferBusy = new ValueBinding<bool>(Group, "transferBusy", false));
 
             AddBinding(new TriggerBinding<string>(Group, "setPlayerName", value => Store(m_PlayerName, value, s => s.PlayerName = value)));
             AddBinding(new TriggerBinding<string>(Group, "setHostPort", value => Store(m_HostPort, value, s => s.HostPort = value)));
@@ -84,6 +103,11 @@ namespace Multiplayer
         protected override void OnUpdate()
         {
             base.OnUpdate();
+            if (!string.IsNullOrEmpty(m_PendingView))
+            {
+                ServePendingView();
+            }
+
             if (++m_Frame % RefreshFrames != 0)
             {
                 return;
@@ -132,6 +156,42 @@ namespace Multiplayer
             m_LastError.Update(session.State == SessionState.Failed ? session.LastError ?? string.Empty : string.Empty);
             m_Recent.Update(string.Join("\n", service.RecentLines));
             m_NewerCity.Update(session.ServerWorld != null && session.ServerWorld.Revision != service.WorldSync.LoadedRevision);
+            m_TransferBusy.Update(service.WorldSync.IsBusy);
+        }
+
+        private void ServePendingView()
+        {
+            GameManager manager = GameManager.instance;
+            if (manager == null || manager.isGameLoading)
+            {
+                return;
+            }
+
+            if (m_PendingView == "panel")
+            {
+                if (manager.gameMode != GameMode.Game)
+                {
+                    return;
+                }
+
+                m_RequestedView.Update("panel");
+                m_PendingView = null;
+                return;
+            }
+
+            if (manager.gameMode != GameMode.MainMenu)
+            {
+                return;
+            }
+
+            if (++m_PendingFrames < OpenDelayFrames)
+            {
+                return;
+            }
+
+            m_RequestedView.Update(m_PendingView == "join" || m_PendingView == "host" ? m_PendingView : "choice");
+            m_PendingView = null;
+            OpenScreen();
         }
 
         private static string Describe(SessionState state)

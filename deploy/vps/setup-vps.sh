@@ -39,6 +39,7 @@ if [ ! -f "$ENV_FILE" ]; then
     echo "CS2MP_MOD_CHECK=names"
     echo "CS2MP_PLAYSET="
     echo "CS2MP_PLAYSET_ID="
+    echo "CS2MP_UPDATE_CHECK=on"
     echo "DOTNET_BUNDLE_EXTRACT_BASE_DIR=$APP/.net"
   } > "$ENV_FILE"
   chown root:cs2mp "$ENV_FILE"

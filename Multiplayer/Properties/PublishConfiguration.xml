@@ -31,7 +31,7 @@ Early access: play with people you know, keep regular saves, and report problems
 	<!--Link to the forum post where the mod can be discussed-->
 	<ForumLink Value="" />
 	<!--Version of the mod-->
-	<ModVersion Value="0.2.0" />
+	<ModVersion Value="0.2.1" />
 	<!--Recommended version of the base game to use the mod-->
 	<GameVersion Value="1.6.*" />
 	<!--Dependency for the mod, can be set multiple times-->
@@ -40,7 +40,7 @@ Early access: play with people you know, keep regular saves, and report problems
 	<RequiredDLC Value="" />
 	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
 	<ChangeLog>
-0.2.0: first published build. Server window, shared city transfer, live build sync (nets, objects, zoning, terrain, transit lines), city settings and building options sync, main-menu screens, in-game panel, playset-aware mod check.
+0.2.1: first published build. Server window, shared city, live build sync (roads, buildings, zoning, terrain, transit lines), city settings and building options sync, menu screens, in-game panel, playset-aware mod check, server update check.
 	</ChangeLog>
 	<!--External link, can be set multiple times. supported types are "discord", "github", "youtube", "twitch", "x", "paypal", "patreon", "buymeacoffee", "kofi", "crowdin", "gitlab", "gofundme"-->
 	<ExternalLink Type="github" Url="https://github.com/DillanStephenson/cs2-multiplayer" />

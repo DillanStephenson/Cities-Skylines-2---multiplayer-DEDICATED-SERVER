@@ -69,6 +69,12 @@ namespace Multiplayer.Server
 
             view.Append(modCheckText);
 
+            UpdateWatcher updates = null;
+            if (options.UpdateCheck && options.UpdateRepository.Length > 0)
+            {
+                updates = new UpdateWatcher(options.UpdateRepository, 6, view);
+            }
+
             PlaysetWatcher watcher = null;
             if (options.PlaysetId > 0)
             {
@@ -195,6 +201,7 @@ namespace Multiplayer.Server
             };
 
             watcher?.Start();
+            updates?.Start();
             var plainReader = view.PanelMode ? null : new PlainCommandReader();
             long lastDraw = 0;
             long lastParentCheck = 0;
@@ -210,6 +217,12 @@ namespace Multiplayer.Server
                 while (watcher != null && watcher.TryTake(out playset))
                 {
                     ApplyPlayset(playset, session, store, view);
+                }
+
+                ReleaseInfo release;
+                while (updates != null && updates.TryTake(out release))
+                {
+                    ReportRelease(release, options.UpdateRepository, session, view);
                 }
 
                 if (session.OwnerPlayerId != 0)
@@ -258,6 +271,7 @@ namespace Multiplayer.Server
             }
 
             session.Stop(stopReason);
+            updates?.Dispose();
             watcher?.Dispose();
             parent?.Dispose();
             view.Draw(session, options, clock.ElapsedMilliseconds, "STOPPED");
@@ -268,6 +282,23 @@ namespace Multiplayer.Server
         }
 
         /// <summary>Returns false when the server should stop.</summary>
+        /// <summary>The newest GitHub release: say whether this server (and so the mod) is behind, and remember it for joiners.</summary>
+        private static void ReportRelease(ReleaseInfo release, string repository, ServerSession session, ConsoleView view)
+        {
+            string running = "v" + Multiplayer.Core.Protocol.ProtocolConstants.ModVersion;
+            if (GitHubReleases.IsNewer(release.Tag, Multiplayer.Core.Protocol.ProtocolConstants.ModVersion))
+            {
+                string page = release.Url.Length > 0 ? release.Url : GitHubReleases.ReleasesPage(repository);
+                session.UpdateNotice = "Update available: " + release.Tag + " (this server runs " + running + "). Server download: " + page + " - players get the mod update from Paradox Mods.";
+                view.Append(session.UpdateNotice, ConsoleColor.Yellow);
+            }
+            else
+            {
+                session.UpdateNotice = string.Empty;
+                view.Append("Up to date: " + running + " is the latest release" + (release.Tag != running ? " (" + release.Tag + ")" : "") + ".", ConsoleColor.DarkGray);
+            }
+        }
+
         /// <summary>A freshly read published playset becomes the reference; players hear about additions and removals.</summary>
         private static void ApplyPlayset(PlaysetSnapshot playset, ServerSession session, WorldStore store, ConsoleView view)
         {
@@ -315,13 +346,19 @@ namespace Multiplayer.Server
             {
                 case "help":
                 case "?":
-                    view.Append("help | list | world | mods | say <text> | speed <0-3|pause> | kick <id|name> [reason] | stop");
+                    view.Append("help | list | world | mods | version | say <text> | speed <0-3|pause> | kick <id|name> [reason] | stop");
                     return true;
 
                 case "world":
                     view.Append(session.World != null
                         ? "World " + session.World.Info + " by " + session.World.Info.UploaderName + " at " + DateTimeOffset.FromUnixTimeSeconds(session.World.Info.SavedAtUnix).ToLocalTime().ToString("HH:mm:ss") + ", sha256 " + session.World.Info.Sha256.Substring(0, 12)
                         : "No world stored yet.");
+                    return true;
+
+                case "update":
+                case "version":
+                    view.Append("Running v" + Multiplayer.Core.Protocol.ProtocolConstants.ModVersion + ", protocol " + Multiplayer.Core.Protocol.ProtocolConstants.ProtocolVersion
+                        + (session.UpdateNotice.Length > 0 ? ". " + session.UpdateNotice : ". No newer release known."));
                     return true;
 
                 case "mods":

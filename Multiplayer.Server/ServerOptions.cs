@@ -38,6 +38,12 @@ namespace Multiplayer.Server
         /// <summary>How often the linked playset is checked for a new public version.</summary>
         public int PlaysetPollMinutes = 5;
 
+        /// <summary>Ask GitHub for the newest release at start and every few hours; off with --no-update-check or CS2MP_UPDATE_CHECK=off.</summary>
+        public bool UpdateCheck = true;
+
+        /// <summary>GitHub repository whose releases are checked (owner/name).</summary>
+        public string UpdateRepository = Multiplayer.Core.Session.GitHubReleases.Repository;
+
         /// <summary>Where the world and mod list are kept between runs. Default: a "world" folder next to the executable.</summary>
         public string DataDirectory = string.Empty;
 
@@ -47,6 +53,7 @@ namespace Multiplayer.Server
         public const string ModCheckVariable = "CS2MP_MOD_CHECK";
         public const string PlaysetVariable = "CS2MP_PLAYSET";
         public const string PlaysetIdVariable = "CS2MP_PLAYSET_ID";
+        public const string UpdateCheckVariable = "CS2MP_UPDATE_CHECK";
 
         public static ServerOptions Parse(string[] args)
         {
@@ -57,6 +64,7 @@ namespace Multiplayer.Server
                 ModCheck = NormalizeModCheck(Environment.GetEnvironmentVariable(ModCheckVariable)),
                 PlaysetHint = (Environment.GetEnvironmentVariable(PlaysetVariable) ?? string.Empty).Trim(),
                 PlaysetId = ParseOptionalInt(Environment.GetEnvironmentVariable(PlaysetIdVariable)),
+                UpdateCheck = NormalizeModCheck(Environment.GetEnvironmentVariable(UpdateCheckVariable) ?? "on") != "off",
             };
 
             for (int i = 0; i < args.Length; i++)
@@ -81,6 +89,8 @@ namespace Multiplayer.Server
                     case "--playset": options.PlaysetHint = Value(args, ref i).Trim(); break;
                     case "--playset-id": options.PlaysetId = ParseInt(Value(args, ref i), "playset-id", 1, int.MaxValue); break;
                     case "--playset-poll": options.PlaysetPollMinutes = ParseInt(Value(args, ref i), "playset-poll", 1, 1440); break;
+                    case "--no-update-check": options.UpdateCheck = false; break;
+                    case "--update-repo": options.UpdateRepository = Value(args, ref i).Trim(); break;
                     case "--data-dir": options.DataDirectory = Value(args, ref i); break;
                     case "-h":
                     case "--help":
@@ -108,7 +118,7 @@ namespace Multiplayer.Server
         {
             return "Multiplayer.Server [--port N] [--password P | --password-base64 B] [--owner-key K | --owner-key-base64 B]\n" +
                    "                   [--game-version V] [--name NAME] [--max-players N] [--parent-pid PID]\n" +
-                   "                   [--exit-when-owner-leaves] [--owner-grace SECONDS] [--plain] [--mod-check strict|names|off] [--playset TEXT] [--playset-id N] [--playset-poll MIN] [--data-dir DIR]\n" +
+                   "                   [--exit-when-owner-leaves] [--owner-grace SECONDS] [--plain] [--mod-check strict|names|off] [--playset TEXT] [--playset-id N] [--playset-poll MIN] [--no-update-check] [--data-dir DIR]\n" +
                    "Environment " + PasswordVariable + " and " + OwnerKeyVariable + " set the secrets without showing them in the process list.\n" +
                    "Without an owner key one is generated and shown; enter it in the game (Join > Owner key) to be the host.";
         }

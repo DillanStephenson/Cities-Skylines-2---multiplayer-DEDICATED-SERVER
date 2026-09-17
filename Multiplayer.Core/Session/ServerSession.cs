@@ -117,6 +117,9 @@ namespace Multiplayer.Core.Session
         /// <summary>True when the reference follows a published Paradox playset; the owner's own list then no longer replaces it.</summary>
         public bool ReferenceLocked { get; private set; }
 
+        /// <summary>Set by the update check when a newer release exists: told to the host on join and to anyone whose mod is newer than this server.</summary>
+        public string UpdateNotice { get; set; } = string.Empty;
+
         public bool IsReceivingWorld => _upload != null;
 
         public long UploadReceivedBytes => _upload != null ? _upload.Received : 0;
@@ -566,6 +569,11 @@ namespace Multiplayer.Core.Session
                 SendToPeer(peer, new ChatMessage { PlayerId = ProtocolConstants.ServerPlayerId, PlayerName = Config.ServerName, Text = SessionText.SanitizeChat(ownerWarning) });
             }
 
+            if (isOwner && UpdateNotice.Length > 0)
+            {
+                SendToPeer(peer, new ChatMessage { PlayerId = ProtocolConstants.ServerPlayerId, PlayerName = Config.ServerName, Text = SessionText.SanitizeChat(UpdateNotice) });
+            }
+
             _log.Info("Player " + peer.PlayerId + " '" + peer.Name + "' joined" + (isOwner ? " as owner" : "") + " with " + mods.Count + " mods");
             PlayerJoined?.Invoke(info);
         }
@@ -581,7 +589,10 @@ namespace Multiplayer.Core.Session
 
             if (!string.Equals(request.ModVersion, Config.ModVersion, StringComparison.Ordinal))
             {
-                return "Mod version mismatch (server " + Config.ModVersion + ", you " + request.ModVersion + ")";
+                string advice = GitHubReleases.IsNewer(request.ModVersion, Config.ModVersion)
+                    ? ". This server needs updating" + (UpdateNotice.Length > 0 ? ": " + UpdateNotice : "")
+                    : ". Update the mod";
+                return "Mod version mismatch (server " + Config.ModVersion + ", you " + request.ModVersion + ")" + advice;
             }
 
             // A server that knows its game build requires clients to state the same one; an empty answer does not pass.

@@ -22,7 +22,8 @@ const SubScreen: any = tryGetModule("game-ui/menu/components/shared/sub-screen/s
 
 /** Rendered in place of the credits screen while the C# side says the multiplayer screen is active. */
 export const MultiplayerScreen = (props: any) => {
-  const [view, setView] = useState<View>("choice");
+  const requested = useValue(b.requestedView$);
+  const [view, setView] = useState<View>(requested === "join" || requested === "host" ? requested : "choice");
   const online = useValue(b.online$);
 
   // Tell the C# side when the player leaves the screen (back button, or the game loading a city), so the
@@ -76,7 +77,8 @@ export const MultiplayerScreen = (props: any) => {
 const Card = ({ icon, label, hint, onSelect }: { icon: string; label: string; hint: string; onSelect: () => void }) => (
   <Button variant="flat" className={styles.card} onSelect={onSelect}>
     <div className={styles.cardIconFrame}>
-      <img src={icon} className={styles.cardIcon} />
+      {/* Masked instead of drawn, so dark glyphs (the house) come out as white as the light ones. */}
+      <div className={styles.cardIcon} style={{ maskImage: `url(${icon})`, WebkitMaskImage: `url(${icon})` }} />
     </div>
     <div className={styles.cardLabel}>{label}</div>
     <div className={styles.cardHint}>{hint}</div>
