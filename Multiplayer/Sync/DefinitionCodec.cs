@@ -363,14 +363,41 @@ namespace Multiplayer.Sync
 
         private CoursePos CreateCoursePos(CoursePosData data, StringBuilder problems)
         {
+            float3 position = EntityResolver.ToFloat3(data.Position);
+            Entity anchor = Entity.Null;
+            float split = data.SplitPosition;
+            if (data.Entity != null && data.Entity.Kind != EntityKind.None)
+            {
+                anchor = _resolver.Resolve(data.Entity, out string failure);
+                if (anchor == Entity.Null)
+                {
+                    // The sender's junction is not here (an earlier piece may not have landed): join whatever net
+                    // is under the point instead, so the piece still connects. Loose cable ends carry no power.
+                    anchor = _resolver.FindAnchorNear(position, data.Entity.Prefab, out float t, out string what);
+                    if (anchor != Entity.Null)
+                    {
+                        if (what == "edge")
+                        {
+                            split = t;
+                        }
+
+                        problems.Append("course anchor: ").Append(failure).Append("; joined the ").Append(what).Append(" under the point instead; ");
+                    }
+                    else
+                    {
+                        problems.Append("course anchor: ").Append(failure).Append("; nothing under the point to join; ");
+                    }
+                }
+            }
+
             return new CoursePos
             {
-                m_Entity = ResolveOrNote(data.Entity, "course anchor", problems),
-                m_Position = EntityResolver.ToFloat3(data.Position),
+                m_Entity = anchor,
+                m_Position = position,
                 m_Rotation = EntityResolver.ToQuaternion(data.Rotation),
                 m_Elevation = new float2(data.ElevationX, data.ElevationY),
                 m_CourseDelta = data.CourseDelta,
-                m_SplitPosition = data.SplitPosition,
+                m_SplitPosition = split,
                 m_Flags = (CoursePosFlags)data.Flags,
                 m_ParentMesh = data.ParentMesh,
             };

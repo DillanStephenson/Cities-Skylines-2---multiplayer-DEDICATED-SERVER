@@ -495,6 +495,93 @@ namespace Multiplayer.Sync
             return best;
         }
 
+        /// <summary>
+        /// For a net course end whose anchor could not be matched: whatever net sits under the point here, so
+        /// the piece still joins the network instead of ending in a loose node. A node within reach first
+        /// (same prefab preferred), else the edge passing under the point, with the split parameter to cut it
+        /// at. Nets are laid out the same on every PC only when every earlier piece landed; when one did not,
+        /// the receiver may have an unsplit edge where the sender has a junction node, and this bridges that.
+        /// </summary>
+        public Entity FindAnchorNear(float3 position, PrefabKey preferred, out float split, out string what)
+        {
+            split = 0f;
+            what = null;
+            Entity prefab = ResolvePrefab(preferred);
+            Entity best = Entity.Null;
+            float bestScore = float.MaxValue;
+
+            using (NativeArray<Entity> entities = _nodes.ToEntityArray(Allocator.Temp))
+            using (NativeArray<NetNode> nodes = _nodes.ToComponentDataArray<NetNode>(Allocator.Temp))
+            using (NativeArray<PrefabRef> prefabs = _nodes.ToComponentDataArray<PrefabRef>(Allocator.Temp))
+            {
+                for (int i = 0; i < entities.Length; i++)
+                {
+                    bool same = prefab != Entity.Null && prefabs[i].m_Prefab == prefab;
+                    float distance = PlaneDistance(nodes[i].m_Position, position);
+                    if (distance > (same ? 4f : 2f))
+                    {
+                        continue;
+                    }
+
+                    float score = distance + HeightPenalty(nodes[i].m_Position, position) + (same ? 0f : 2f);
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        best = entities[i];
+                    }
+                }
+            }
+
+            if (best != Entity.Null)
+            {
+                what = "node";
+                return best;
+            }
+
+            const float edgeReach = 2.5f;
+            float bestT = 0f;
+            using (NativeArray<Entity> entities = _edges.ToEntityArray(Allocator.Temp))
+            using (NativeArray<Curve> curves = _edges.ToComponentDataArray<Curve>(Allocator.Temp))
+            using (NativeArray<PrefabRef> prefabs = _edges.ToComponentDataArray<PrefabRef>(Allocator.Temp))
+            {
+                for (int i = 0; i < entities.Length; i++)
+                {
+                    Bezier4x3 curve = curves[i].m_Bezier;
+                    float2 min = math.min(math.min(curve.a.xz, curve.b.xz), math.min(curve.c.xz, curve.d.xz)) - edgeReach;
+                    float2 max = math.max(math.max(curve.a.xz, curve.b.xz), math.max(curve.c.xz, curve.d.xz)) + edgeReach;
+                    if (math.any(position.xz < min) || math.any(position.xz > max))
+                    {
+                        continue;
+                    }
+
+                    float t;
+                    float distance = PlaneDistanceToCurve(curve, position, out t);
+                    if (distance > edgeReach || t < 0.02f || t > 0.98f)
+                    {
+                        // Right at an end means the end node should have matched; do not split a hair off an edge.
+                        continue;
+                    }
+
+                    bool same = prefab != Entity.Null && prefabs[i].m_Prefab == prefab;
+                    float score = distance + (same ? 0f : 1f);
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        best = entities[i];
+                        bestT = t;
+                    }
+                }
+            }
+
+            if (best != Entity.Null)
+            {
+                what = "edge";
+                split = bestT;
+            }
+
+            return best;
+        }
+
         // ------------------------------------------------------------------ geometry
 
         /// <summary>Distance on the map plane; infinite when heights disagree beyond any plausible terrain difference.</summary>
@@ -516,14 +603,23 @@ namespace Multiplayer.Sync
 
         private static float PlaneDistanceToCurve(Bezier4x3 curve, float3 target)
         {
+            float t;
+            return PlaneDistanceToCurve(curve, target, out t);
+        }
+
+        private static float PlaneDistanceToCurve(Bezier4x3 curve, float3 target, out float bestT)
+        {
             float best = float.MaxValue;
+            bestT = 0f;
             for (int i = 0; i <= EdgeSamples; i++)
             {
-                float3 point = MathUtils.Position(curve, i / (float)EdgeSamples);
+                float t = i / (float)EdgeSamples;
+                float3 point = MathUtils.Position(curve, t);
                 float distance = PlaneDistance(point, target);
                 if (distance < best)
                 {
                     best = distance;
+                    bestT = t;
                 }
             }
 
