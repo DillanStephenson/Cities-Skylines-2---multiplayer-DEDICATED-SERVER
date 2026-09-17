@@ -72,7 +72,16 @@ namespace Multiplayer.Sync
             public BuildCommand Command;
             public int FromPlayer;
             public bool CaptureAnyway;
+
+            /// <summary>Times this command was held back because a prefab it needs has not arrived yet (a custom road, say).</summary>
+            public int Waits;
         }
+
+        /// <summary>How often, and how many times, a command waits for a prefab that another mod still has to create here.</summary>
+        private const int PrefabWaitFrames = 60;
+        private const int PrefabWaitLimit = 10;
+        private int m_PrefabWaitUntilFrame;
+        private int m_FrameCount;
 
         public void Enqueue(BuildCommand command, int fromPlayer, bool captureAnyway = false)
         {
@@ -116,11 +125,23 @@ namespace Multiplayer.Sync
                 return;
             }
 
+            m_FrameCount++;
             switch (m_Phase)
             {
                 case Phase.Idle:
                     if (m_Queue.Count == 0)
                     {
+                        return;
+                    }
+
+                    if (m_FrameCount < m_PrefabWaitUntilFrame)
+                    {
+                        return;
+                    }
+
+                    if (WaitsForPrefab(m_Queue[0]))
+                    {
+                        m_PrefabWaitUntilFrame = m_FrameCount + PrefabWaitFrames;
                         return;
                     }
 
@@ -303,6 +324,34 @@ namespace Multiplayer.Sync
         {
             ReleaseTool();
             base.OnDestroy();
+        }
+
+        /// <summary>
+        /// True when the command uses a prefab this game does not have yet and it is worth waiting a moment: another
+        /// mod's runtime-made prefab (a Road Builder road) usually arrives through its own sync a second later.
+        /// </summary>
+        private bool WaitsForPrefab(QueuedBuild queued)
+        {
+            if (queued.Waits >= PrefabWaitLimit)
+            {
+                return false;
+            }
+
+            foreach (DefinitionData definition in queued.Command.Definitions)
+            {
+                if (definition.Prefab != null && !definition.Prefab.IsEmpty && m_Resolver.ResolvePrefab(definition.Prefab) == Entity.Null)
+                {
+                    queued.Waits++;
+                    if (queued.Waits == 1)
+                    {
+                        Mod.log.Info("Replay of " + queued.Command + " waits for prefab '" + definition.Prefab + "' to turn up here");
+                    }
+
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>Terraforming strokes only: independent of each other, so several can be applied in one frame.</summary>

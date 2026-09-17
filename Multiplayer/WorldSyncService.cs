@@ -33,6 +33,10 @@ namespace Multiplayer
         private const int RetryDelayMs = 30000;
         private const int RegisterWaitFrames = 600;
         private const int NewCityGraceMs = 10000;
+        private const long RecentBuildMs = 120000;
+
+        /// <summary>When the local player last placed or removed something (service clock); 0 when never.</summary>
+        public long LastLocalBuildMs { get; set; }
         private const int NewCityMaxTries = 5;
 
         private long _newCityInGameSinceMs = -1;
@@ -201,9 +205,12 @@ namespace Multiplayer
 
                 // From the menu: always. In a city: when this game has not loaded the shared city yet (unless it
                 // is the one expected to upload its own), or when the player asked to follow other people's saves.
+                // Following saves never interrupts someone who is building: what they placed in the last two
+                // minutes may not be in that save yet, and a reload would take it away from under them.
+                bool recentlyBuilt = LastLocalBuildMs > 0 && nowMs - LastLocalBuildMs < RecentBuildMs;
                 bool automatic = inMenu
                     || (inGame && _loadedRevision == 0 && !_session.IsLeader)
-                    || (inGame && _loadedRevision != 0 && _settings.FollowSaves);
+                    || (inGame && _loadedRevision != 0 && _settings.FollowSaves && !recentlyBuilt);
                 if (automatic)
                 {
                     StartDownload(nowMs);

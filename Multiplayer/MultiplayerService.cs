@@ -74,6 +74,12 @@ namespace Multiplayer
             Session = new ClientSession(new ClientConfig { GameVersion = ReadGameVersion() }, new LogAdapter(log));
             Session.StateChanged += OnStateChanged;
             Session.PlayerJoined += player => Note(player + " joined");
+            Session.PlayerJoined += player =>
+            {
+                // A newcomer needs every custom road we know before they can replay anything built with one.
+                World world = World.DefaultGameObjectInjectionWorld;
+                world?.GetExistingSystemManaged<Sync.RoadConfigSyncSystem>()?.ResendAll();
+            };
             Session.PlayerLeft += (player, reason) => Note(player + " left (" + reason + ")");
             Session.PlayerLeft += (player, reason) => Sync.PresenceStore.Remove(player.PlayerId);
             Session.PlayerLeft += (player, reason) => Sync.PreviewStore.Remove(player.PlayerId);
@@ -117,6 +123,7 @@ namespace Multiplayer
             byte[] bytes = command.ToBytes();
             Session.SendGameplayCommand(BuildCommand.Kind, bytes);
             _buildsSent++;
+            WorldSync.LastLocalBuildMs = Now;
             _log.Info("Sent " + command + ", " + bytes.Length + " bytes: " + Summarize(command));
             RefreshStatus();
         }
@@ -159,6 +166,14 @@ namespace Multiplayer
             Session.SendGameplayCommand(ModDataCommand.Kind, bytes);
             _modDataSent++;
             _log.Info("Sent mod data: " + command + " (" + bytes.Length + " bytes, " + command.Entities.Count + " entity refs)");
+        }
+
+        /// <summary>Called by the road config sync with a Road Builder road the others need before they can replay it.</summary>
+        public void SendModConfig(ModConfigCommand command)
+        {
+            byte[] bytes = command.ToBytes();
+            Session.SendGameplayCommand(ModConfigCommand.Kind, bytes);
+            _log.Info("Sent " + command);
         }
 
         /// <summary>Called by the preview capture a few times a second with what the local player's tool is showing.</summary>
@@ -207,6 +222,28 @@ namespace Multiplayer
                 catch (Exception ex)
                 {
                     _log.Warn("Bad preview from player " + message.OriginPlayerId + ": " + ex.Message);
+                }
+
+                return;
+            }
+
+            if (message.Kind == ModConfigCommand.Kind)
+            {
+                try
+                {
+                    ModConfigCommand config = ModConfigCommand.FromBytes(message.Payload);
+                    World world = World.DefaultGameObjectInjectionWorld;
+                    Sync.RoadConfigSyncSystem system = world != null ? world.GetExistingSystemManaged<Sync.RoadConfigSyncSystem>() : null;
+                    if (system != null)
+                    {
+                        system.Receive(config);
+                    }
+
+                    _log.Info("Received " + config + " from " + PlayerName(message.OriginPlayerId));
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn("Bad road config from player " + message.OriginPlayerId + ": " + ex.Message);
                 }
 
                 return;
