@@ -1,0 +1,10 @@
+# Keep shell and service files LF so they run on the Linux box straight from a Windows checkout.
+*.sh text eol=lf
+*.service text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Everything else follows the platform default.
+* text=auto
+*.png binary
+*.jpg binary
