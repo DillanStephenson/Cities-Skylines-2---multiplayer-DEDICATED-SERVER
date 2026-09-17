@@ -58,6 +58,9 @@ namespace Multiplayer.Server
         /// <summary>Chat line sent to every player on join; empty for none.</summary>
         public string Welcome = string.Empty;
 
+        /// <summary>Other mod versions to let in besides this server's own, while a release rolls out ("0.2.3").</summary>
+        public List<string> AcceptModVersions = new List<string>();
+
         /// <summary>Secrets may come from the environment so they never appear in a process list; arguments override.</summary>
         public const string PasswordVariable = "CS2MP_PASSWORD";
         public const string OwnerKeyVariable = "CS2MP_OWNER_KEY";

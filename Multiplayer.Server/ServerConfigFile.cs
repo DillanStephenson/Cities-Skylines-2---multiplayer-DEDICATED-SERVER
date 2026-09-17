@@ -48,6 +48,9 @@ namespace Multiplayer.Server
                     case "requiredmods":
                         options.RequiredMods = Mods(value, warnings);
                         break;
+                    case "acceptmodversions":
+                        options.AcceptModVersions = Strings(value, warnings, key);
+                        break;
                     default:
                         if (!key.StartsWith("_", StringComparison.Ordinal))
                         {
@@ -209,6 +212,42 @@ namespace Multiplayer.Server
                 if (entry.Length > 0)
                 {
                     result.Add(entry);
+                }
+            }
+
+            return result;
+        }
+
+        private static List<string> Strings(object value, List<string> warnings, string key)
+        {
+            var result = new List<string>();
+            List<object> items = MiniJson.AsArray(value);
+            if (items == null)
+            {
+                if (value is string single)
+                {
+                    foreach (string part in single.Split(','))
+                    {
+                        if (part.Trim().Length > 0)
+                        {
+                            result.Add(part.Trim());
+                        }
+                    }
+                }
+                else if (value != null)
+                {
+                    warnings.Add("server.json: '" + key + "' should be a list of strings");
+                }
+
+                return result;
+            }
+
+            foreach (object item in items)
+            {
+                string text = Text(item, string.Empty).Trim();
+                if (text.Length > 0)
+                {
+                    result.Add(text);
                 }
             }
 

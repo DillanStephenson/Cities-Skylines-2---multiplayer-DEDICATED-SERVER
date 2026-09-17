@@ -19,6 +19,9 @@ namespace Multiplayer.Core.Session
 
         public string ModVersion = ProtocolConstants.ModVersion;
 
+        /// <summary>Other mod versions this server also lets in (same protocol, minor differences), for the days a release is rolling out.</summary>
+        public List<string> ExtraModVersions = new List<string>();
+
         /// <summary>Game build clients must match exactly. Empty disables the check.</summary>
         public string GameVersion = string.Empty;
 
@@ -604,7 +607,7 @@ namespace Multiplayer.Core.Session
                 return "Incompatible mod protocol (server " + ProtocolConstants.ProtocolVersion + ", you " + request.ProtocolVersion + ")";
             }
 
-            if (!string.Equals(request.ModVersion, Config.ModVersion, StringComparison.Ordinal))
+            if (!string.Equals(request.ModVersion, Config.ModVersion, StringComparison.Ordinal) && !Config.ExtraModVersions.Contains(request.ModVersion ?? string.Empty))
             {
                 string advice = GitHubReleases.IsNewer(request.ModVersion, Config.ModVersion)
                     ? ". This server needs updating" + (UpdateNotice.Length > 0 ? ": " + UpdateNotice : "")

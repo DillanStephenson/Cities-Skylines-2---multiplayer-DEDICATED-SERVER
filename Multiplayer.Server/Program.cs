@@ -66,6 +66,7 @@ namespace Multiplayer.Server
                 RequireMatchingMods = options.ModCheck != "off",
                 IgnoreModVersions = options.ModCheck != "strict",
                 PlaysetHint = options.PlaysetHint,
+                ExtraModVersions = new List<string>(options.AcceptModVersions),
                 // Only the window the game spawned dies with its game; a standalone server outlives any one player.
                 OwnerMayStop = options.ExitWhenOwnerLeaves,
             };
@@ -399,6 +400,13 @@ namespace Multiplayer.Server
             {
                 options.Welcome = fresh.Welcome;
                 changed.Add("welcome");
+            }
+
+            if (!SameList(fresh.AcceptModVersions, options.AcceptModVersions))
+            {
+                options.AcceptModVersions = fresh.AcceptModVersions;
+                session.Config.ExtraModVersions = new List<string>(fresh.AcceptModVersions);
+                changed.Add("acceptModVersions");
             }
 
             bool modsChanged = !SameList(fresh.RequiredMods, options.RequiredMods);

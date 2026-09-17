@@ -47,7 +47,8 @@ namespace Multiplayer.SmokeClient
                 mods.Add(mod.Trim());
             }
 
-            var config = new ClientConfig { PlayerName = name, Password = password, OwnerKey = ownerKey, GameVersion = gameVersion, Mods = mods, Playset = playset };
+            string modVersion = Arg(args, "-mod-version", ProtocolConstants.ModVersion);
+            var config = new ClientConfig { PlayerName = name, Password = password, OwnerKey = ownerKey, GameVersion = gameVersion, Mods = mods, Playset = playset, ModVersion = modVersion };
             var session = new ClientSession(config, new ConsoleLog());
             bool accepted = false;
             bool transferOk = uploadPath == null && downloadPath == null;
