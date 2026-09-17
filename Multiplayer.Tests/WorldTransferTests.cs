@@ -82,16 +82,28 @@ namespace Multiplayer.Tests
         }
 
         [Fact]
-        public void GuestUpload_IsRefused()
+        public void AnyPlayerMaySave_AndTheNewestSaveWins()
         {
             using var loop = new Loopback();
             ServerSession server = loop.StartServer();
-            ClientSession guest = loop.StartClient("Guest");
-            Assert.True(loop.PumpUntil(() => guest.State == SessionState.Connected));
+            ClientSession a = loop.StartClient("Ada");
+            ClientSession b = loop.StartClient("Bob");
+            Assert.True(loop.PumpUntil(() => a.State == SessionState.Connected && b.State == SessionState.Connected && a.ServerWorldKnown && b.ServerWorldKnown));
 
-            // A guest cannot even start one client-side; simulate a rogue client by flipping the flag through the API path.
-            Assert.False(guest.UploadWorld("x", "x", "", new byte[10]));
-            Assert.Null(server.World);
+            int aRevision = 0, bRevision = 0;
+            a.WorldUploadFinished += (ok, revision, reason) => aRevision = ok ? revision : -1;
+            b.WorldUploadFinished += (ok, revision, reason) => bRevision = ok ? revision : -1;
+
+            Assert.True(a.UploadWorld("Ada", "City", "a", new byte[Multiplayer.Core.Protocol.ProtocolConstants.WorldChunkBytes * 3]));
+            Assert.True(loop.PumpUntil(() => aRevision != 0));
+            Assert.Equal(1, aRevision);
+            Assert.Equal("Ada", server.World.Info.UploaderName);
+
+            Assert.True(b.UploadWorld("Bob", "City", "b", new byte[16]));
+            Assert.True(loop.PumpUntil(() => bRevision != 0));
+            Assert.Equal(2, bRevision);
+            Assert.Equal("Bob", server.World.Info.UploaderName);
+            Assert.True(loop.PumpUntil(() => a.ServerWorld != null && a.ServerWorld.Revision == 2));
         }
 
         [Fact]

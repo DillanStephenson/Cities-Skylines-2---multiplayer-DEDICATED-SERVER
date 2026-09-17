@@ -111,7 +111,11 @@ namespace Multiplayer
 
             if (serverWorld != null && serverWorld.Revision != _loadedRevision)
             {
-                bool automatic = inMenu || (inGame && !_session.IsOwner && _loadedRevision == 0);
+                // From the menu: always. In a city: when this game has not loaded the shared city yet (unless it
+                // is the one expected to upload its own), or when the player asked to follow other people's saves.
+                bool automatic = inMenu
+                    || (inGame && _loadedRevision == 0 && !_session.IsLeader)
+                    || (inGame && _loadedRevision != 0 && _settings.FollowSaves);
                 if (automatic)
                 {
                     StartDownload(nowMs);
@@ -120,7 +124,7 @@ namespace Multiplayer
                 return;
             }
 
-            if (_session.IsOwner && inGame)
+            if (_session.IsLeader && inGame)
             {
                 if (serverWorld == null)
                 {
@@ -140,9 +144,9 @@ namespace Multiplayer
 
         public void UploadNow(long nowMs)
         {
-            if (_session.State != SessionState.Connected || !_session.IsOwner)
+            if (_session.State != SessionState.Connected)
             {
-                _note("Only the host can upload the city");
+                _note("Not connected");
                 return;
             }
 
@@ -501,7 +505,7 @@ namespace Multiplayer
             }
             else if (_session.ServerWorld == null)
             {
-                builder.Append(_session.IsOwner ? "Shared city: none yet; load a city and it uploads" : "Shared city: none yet; waiting for the host");
+                builder.Append(_session.IsLeader ? "Shared city: none yet; load a city and it uploads" : "Shared city: none yet; waiting for someone to save one");
             }
             else
             {

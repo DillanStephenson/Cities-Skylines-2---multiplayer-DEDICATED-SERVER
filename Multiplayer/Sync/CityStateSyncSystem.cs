@@ -27,6 +27,9 @@ namespace Multiplayer.Sync
     {
         private const int CheckIntervalFrames = 30;
         private const int SnapshotIntervalFrames = 3600;
+
+        /// <summary>How often the leader sends the treasury balance; everyone else adopts it.</summary>
+        private const int MoneyIntervalFrames = 300;
         private const int ResidentialLevels = 5;
 
         private TaxSystem m_TaxSystem;
@@ -42,6 +45,7 @@ namespace Multiplayer.Sync
         private bool m_Primed;
         private bool m_ResyncAfterApply;
         private int m_Frame;
+        private int m_MoneyFrame;
         private int m_Sent;
         private int m_Applied;
 
@@ -125,6 +129,18 @@ namespace Multiplayer.Sync
                 }
 
                 m_Last[pair.Key] = pair.Value;
+            }
+
+            // Money is the one number that drifts fastest between PCs (each simulates its own income and
+            // upkeep). The leader's balance is the shared one; others overwrite theirs with it.
+            if (service.IsLeader)
+            {
+                m_MoneyFrame += CheckIntervalFrames;
+                if (m_MoneyFrame >= MoneyIntervalFrames && TryReadMoney(out int balance))
+                {
+                    m_MoneyFrame = 0;
+                    command.Entries.Add(new StateEntry("money", balance));
+                }
             }
 
             if (command.Entries.Count == 0)
@@ -257,6 +273,9 @@ namespace Multiplayer.Sync
 
             switch (parts[0])
             {
+                case "money":
+                    return ApplyMoney((int)Math.Round(value));
+
                 case "tax":
                     return ApplyTax(parts, value);
 
@@ -377,6 +396,43 @@ namespace Multiplayer.Sync
                 default:
                     return false;
             }
+        }
+
+        private bool TryReadMoney(out int balance)
+        {
+            balance = 0;
+            Entity city = m_CitySystem.City;
+            if (city == Entity.Null || !EntityManager.HasComponent<PlayerMoney>(city))
+            {
+                return false;
+            }
+
+            PlayerMoney money = EntityManager.GetComponentData<PlayerMoney>(city);
+            if (money.m_Unlimited)
+            {
+                return false;
+            }
+
+            balance = money.money;
+            return true;
+        }
+
+        private bool ApplyMoney(int balance)
+        {
+            Entity city = m_CitySystem.City;
+            if (city == Entity.Null || !EntityManager.HasComponent<PlayerMoney>(city))
+            {
+                return false;
+            }
+
+            PlayerMoney current = EntityManager.GetComponentData<PlayerMoney>(city);
+            if (current.m_Unlimited || current.money == balance)
+            {
+                return false;
+            }
+
+            EntityManager.SetComponentData(city, new PlayerMoney(balance));
+            return true;
         }
 
         private void ReadPolicy(Entity prefab, out bool active, out float adjustment)

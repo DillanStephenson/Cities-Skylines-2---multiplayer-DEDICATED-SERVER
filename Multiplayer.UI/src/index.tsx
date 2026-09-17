@@ -4,6 +4,7 @@ import { screenActive$ } from "mods/bindings";
 import { GamePanel, GameToolbarButton } from "mods/game-panel";
 import { MultiplayerMenuButton } from "mods/menu-button";
 import { MultiplayerScreen } from "mods/multiplayer-screen";
+import { PresenceOverlay } from "mods/presence-overlay";
 
 const MAIN_MENU = "game-ui/menu/components/main-menu-screen/main-menu-screen.tsx";
 const CREDITS = "game-ui/menu/components/credits-screen/credits-screen.tsx";
@@ -20,6 +21,7 @@ const register: ModRegistrar = (moduleRegistry) => {
   try {
     moduleRegistry.append("GameBottomRight", GameToolbarButton);
     moduleRegistry.append("Game", GamePanel);
+    moduleRegistry.append("Game", PresenceOverlay);
   } catch (error) {
     console.warn("[Multiplayer] could not add the in-game panel", error);
   }

@@ -84,7 +84,7 @@ export const GamePanel = () => {
       )}
 
       <div className={styles.gameActions}>
-        {online && isOwner && (
+        {online && (
           <Button variant="primary" className={styles.gameButton} disabled={busy} onSelect={b.uploadCity}>
             {busy ? "Working..." : "Save to server"}
           </Button>
@@ -100,7 +100,7 @@ export const GamePanel = () => {
           </Button>
         )}
       </div>
-      {online && !isOwner && <div className={styles.gameHint}>Only the host can save the city to the server. Your building reaches everyone live either way.</div>}
+      {online && <div className={styles.gameHint}>Saving sends the city you are playing to the server; the others fetch it from here or reload on their own if they have that switched on.</div>}
       {!online && joinAddress && (
         <div className={styles.gameActions}>
           <Button variant="primary" className={styles.gameButton} onSelect={b.join}>

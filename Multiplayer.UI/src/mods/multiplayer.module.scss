@@ -318,6 +318,43 @@
   color: rgba(157, 193, 222, 0.8);
 }
 
+// ---------------------------------------------------------------- other players' name tags
+
+.presenceLayer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.presenceTag {
+  position: absolute;
+  transform: translate(-50%, -140%);
+  display: flex;
+  align-items: center;
+  padding: 3rem 10rem 3rem 8rem;
+  border-radius: 12rem;
+  border: 2rem solid #ffffff;
+  background-color: rgba(4, 18, 44, 0.85);
+  color: #ffffff;
+  font-size: 14rem;
+  letter-spacing: 0.5rem;
+  white-space: nowrap;
+}
+
+.presenceTagOff {
+  opacity: 0.55;
+}
+
+.presenceDot {
+  width: 9rem;
+  height: 9rem;
+  margin-right: 7rem;
+  border-radius: 50%;
+}
+
 // ---------------------------------------------------------------- fallback frame
 
 .fallbackHeader {

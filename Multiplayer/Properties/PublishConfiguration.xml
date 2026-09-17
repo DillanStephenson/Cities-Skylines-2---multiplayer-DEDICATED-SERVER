@@ -11,8 +11,9 @@ Co-op multiplayer for Cities: Skylines II built around a **server window**: a sm
 
 **How it works**
 - Main menu > **Multiplayer**. **Host game** opens the server window next to your game and joins it; friends join your address and port. **Join game** connects to a friend or to a dedicated server.
-- Joining fetches the shared city and loads it. The host saves the city to the server from the in-game panel (bottom-right button), or automatically every few minutes.
-- What anyone builds, zones, bulldozes, terraforms or sets in a panel (taxes, budgets, fees, policies, building options) shows up on every PC live. The simulation itself runs per PC; the host's saves are the common ground.
+- Joining fetches the shared city and loads it. Anyone can save the city to the server from the in-game panel (bottom-right button); the host also saves automatically every few minutes.
+- What anyone builds, zones, bulldozes, terraforms or sets in a panel (taxes, budgets, fees, policies, building options) shows up on every PC live, and everyone shares one treasury. You see where the other players are on the map.
+- The simulation itself runs per PC, so citizens and traffic can differ a little; a save from anyone brings the others back in line.
 
 **Mods**
 Any mod is allowed as long as everyone runs the same playset. The server compares mod lists (ignoring version numbers) and tells a rejected player which playset to activate. A dedicated server can follow a published Paradox playset by itself.
@@ -31,7 +32,7 @@ Early access: play with people you know, keep regular saves, and report problems
 	<!--Link to the forum post where the mod can be discussed-->
 	<ForumLink Value="" />
 	<!--Version of the mod-->
-	<ModVersion Value="0.2.1" />
+	<ModVersion Value="0.2.2" />
 	<!--Recommended version of the base game to use the mod-->
 	<GameVersion Value="1.6.*" />
 	<!--Dependency for the mod, can be set multiple times-->
@@ -40,7 +41,7 @@ Early access: play with people you know, keep regular saves, and report problems
 	<RequiredDLC Value="" />
 	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
 	<ChangeLog>
-0.2.1: first published build. Server window, shared city, live build sync (roads, buildings, zoning, terrain, transit lines), city settings and building options sync, menu screens, in-game panel, playset-aware mod check, server update check.
+0.2.2: first published build. Server window, shared city, live build sync (roads, buildings, zoning, terrain, transit lines), city settings and building options sync, shared treasury, player markers on the map, anyone can save, menu screens, in-game panel, playset-aware mod check, server update check.
 	</ChangeLog>
 	<!--External link, can be set multiple times. supported types are "discord", "github", "youtube", "twitch", "x", "paypal", "patreon", "buymeacoffee", "kofi", "crowdin", "gitlab", "gofundme"-->
 	<ExternalLink Type="github" Url="https://github.com/DillanStephenson/cs2-multiplayer" />

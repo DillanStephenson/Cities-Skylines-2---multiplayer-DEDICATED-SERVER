@@ -276,10 +276,46 @@ namespace Multiplayer.Core.Session
             return true;
         }
 
-        /// <summary>Owner only: replace the server's world. The whole payload is queued at once; the verdict arrives through <see cref="WorldUploadFinished"/>.</summary>
+        /// <summary>
+        /// The player whose game does the automatic saves: the owner when one is connected, otherwise the
+        /// longest-connected player (lowest id). Anyone may save by hand.
+        /// </summary>
+        public bool IsLeader
+        {
+            get
+            {
+                if (State != SessionState.Connected)
+                {
+                    return false;
+                }
+
+                if (IsOwner)
+                {
+                    return true;
+                }
+
+                int lowest = int.MaxValue;
+                foreach (PlayerInfo player in Players)
+                {
+                    if (player.IsOwner)
+                    {
+                        return false;
+                    }
+
+                    if (player.PlayerId < lowest)
+                    {
+                        lowest = player.PlayerId;
+                    }
+                }
+
+                return lowest == LocalPlayerId;
+            }
+        }
+
+        /// <summary>Replace the server's world (any player may). The whole payload is queued at once; the verdict arrives through <see cref="WorldUploadFinished"/>.</summary>
         public bool UploadWorld(string saveName, string cityName, string guid, byte[] data)
         {
-            if (State != SessionState.Connected || !IsOwner || IsUploadingWorld || data == null)
+            if (State != SessionState.Connected || IsUploadingWorld || data == null)
             {
                 return false;
             }

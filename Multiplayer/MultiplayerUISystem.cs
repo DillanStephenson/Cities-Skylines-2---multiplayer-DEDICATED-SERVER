@@ -40,6 +40,8 @@ namespace Multiplayer
         private ValueBinding<bool> m_NewerCity;
         private ValueBinding<string> m_RequestedView;
         private ValueBinding<bool> m_TransferBusy;
+        private ValueBinding<string> m_Presence;
+        private readonly StringBuilder m_PresenceJson = new StringBuilder();
         private string m_PendingView;
         private int m_PendingFrames;
         private int m_Frame;
@@ -83,6 +85,7 @@ namespace Multiplayer
             AddBinding(m_NewerCity = new ValueBinding<bool>(Group, "newerCity", false));
             AddBinding(m_RequestedView = new ValueBinding<string>(Group, "requestedView", string.Empty));
             AddBinding(m_TransferBusy = new ValueBinding<bool>(Group, "transferBusy", false));
+            AddBinding(m_Presence = new ValueBinding<string>(Group, "presence", string.Empty));
 
             AddBinding(new TriggerBinding<string>(Group, "setPlayerName", value => Store(m_PlayerName, value, s => s.PlayerName = value)));
             AddBinding(new TriggerBinding<string>(Group, "setHostPort", value => Store(m_HostPort, value, s => s.HostPort = value)));
@@ -108,7 +111,12 @@ namespace Multiplayer
                 ServePendingView();
             }
 
-            if (++m_Frame % RefreshFrames != 0)
+            if ((++m_Frame & 1) == 0)
+            {
+                m_Presence.Update(BuildPresenceJson());
+            }
+
+            if (m_Frame % RefreshFrames != 0)
             {
                 return;
             }
@@ -157,6 +165,78 @@ namespace Multiplayer
             m_Recent.Update(string.Join("\n", service.RecentLines));
             m_NewerCity.Update(session.ServerWorld != null && session.ServerWorld.Revision != service.WorldSync.LoadedRevision);
             m_TransferBusy.Update(service.WorldSync.IsBusy);
+        }
+
+        /// <summary>Screen positions for the other players' name tags: [{"id":2,"n":"Bob","x":312,"y":540,"off":false,"c":"#ff9e33"}].</summary>
+        private string BuildPresenceJson()
+        {
+            MultiplayerService service = Mod.Service;
+            GameManager manager = GameManager.instance;
+            if (service == null || service.Session.State != SessionState.Connected || manager == null || manager.gameMode != GameMode.Game || manager.isGameLoading || Sync.PresenceStore.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            UnityEngine.Camera camera = UnityEngine.Camera.main;
+            if (camera == null)
+            {
+                return string.Empty;
+            }
+
+            const float margin = 48f;
+            float width = UnityEngine.Screen.width;
+            float height = UnityEngine.Screen.height;
+            m_PresenceJson.Length = 0;
+            m_PresenceJson.Append('[');
+            bool first = true;
+            foreach (Sync.RemotePresence player in Sync.PresenceStore.Snapshot(service.NowMs))
+            {
+                UnityEngine.Vector3 screen = camera.WorldToScreenPoint(new UnityEngine.Vector3(player.Pivot.x, player.Pivot.y + 2f, player.Pivot.z));
+                bool behind = screen.z < 0f;
+                float x = behind ? width - screen.x : screen.x;
+                float y = behind ? screen.y : height - screen.y;
+                bool off = behind || x < margin || x > width - margin || y < margin || y > height - margin;
+                x = Math.Min(Math.Max(x, margin), width - margin);
+                y = Math.Min(Math.Max(y, margin), height - margin);
+
+                if (!first)
+                {
+                    m_PresenceJson.Append(',');
+                }
+
+                first = false;
+                m_PresenceJson.Append("{\"id\":").Append(player.PlayerId)
+                    .Append(",\"n\":\"").Append(JsonEscape(player.Name)).Append('"')
+                    .Append(",\"x\":").Append((int)x)
+                    .Append(",\"y\":").Append((int)y)
+                    .Append(",\"off\":").Append(off ? "true" : "false")
+                    .Append(",\"c\":\"").Append(Sync.PresenceStore.HexFor(player.PlayerId)).Append("\"}");
+            }
+
+            m_PresenceJson.Append(']');
+            return first ? string.Empty : m_PresenceJson.ToString();
+        }
+
+        private static string JsonEscape(string text)
+        {
+            var builder = new StringBuilder(text.Length + 4);
+            foreach (char c in text)
+            {
+                if (c == '"' || c == '\\')
+                {
+                    builder.Append('\\').Append(c);
+                }
+                else if (c < ' ')
+                {
+                    builder.Append(' ');
+                }
+                else
+                {
+                    builder.Append(c);
+                }
+            }
+
+            return builder.ToString();
         }
 
         private void ServePendingView()

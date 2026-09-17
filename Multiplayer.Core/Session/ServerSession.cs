@@ -711,9 +711,10 @@ namespace Multiplayer.Core.Session
 
         private void HandleUploadBegin(Peer peer, WorldUploadBeginMessage begin)
         {
-            if (peer.PlayerId != OwnerPlayerId)
+            // Any player may save the city to the server; the newest upload is the shared copy.
+            if (_upload != null && _upload.ConnectionId != peer.ConnectionId)
             {
-                SendToPeer(peer, new WorldUploadResultMessage { Accepted = false, Reason = "Only the host can upload the world" });
+                SendToPeer(peer, new WorldUploadResultMessage { Accepted = false, Reason = "Someone else is uploading right now; try again in a moment" });
                 return;
             }
 
@@ -730,7 +731,7 @@ namespace Multiplayer.Core.Session
                 Buffer = new byte[begin.Size],
                 Received = 0,
             };
-            _log.Info("Receiving world '" + begin.SaveName + "' (" + WorldInfo.FormatSize(begin.Size) + ") from the owner");
+            _log.Info("Receiving world '" + begin.SaveName + "' (" + WorldInfo.FormatSize(begin.Size) + ") from player " + peer.PlayerId + " '" + peer.Name + "'");
         }
 
         private void HandleUploadChunk(Peer peer, WorldChunkMessage chunk)

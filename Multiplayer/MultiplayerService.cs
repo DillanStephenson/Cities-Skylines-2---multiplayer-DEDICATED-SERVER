@@ -59,6 +59,12 @@ namespace Multiplayer
 
         private long Now => _clock.ElapsedMilliseconds;
 
+        /// <summary>The service clock, for systems that time-stamp what arrives.</summary>
+        public long NowMs => Now;
+
+        /// <summary>The player whose game does the automatic saves: the owner, or the longest-connected player without one.</summary>
+        public bool IsLeader => Session.IsLeader;
+
         public MultiplayerService(Setting settings, ILog log, string modDirectory)
         {
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
@@ -69,6 +75,7 @@ namespace Multiplayer
             Session.StateChanged += OnStateChanged;
             Session.PlayerJoined += player => Note(player + " joined");
             Session.PlayerLeft += (player, reason) => Note(player + " left (" + reason + ")");
+            Session.PlayerLeft += (player, reason) => Sync.PresenceStore.Remove(player.PlayerId);
             Session.ChatReceived += (player, text) => Note(player.Name + ": " + text);
             Session.SimulationSpeedReceived += speed => _pendingSpeed = speed;
             Session.GameplayCommandReceived += OnGameplayCommand;
@@ -127,6 +134,12 @@ namespace Multiplayer
         private int _policiesSent;
         private int _policiesReceived;
 
+        /// <summary>Called by the presence system a few times a second with where this player is looking.</summary>
+        public void SendPresence(PresenceCommand command)
+        {
+            Session.SendGameplayCommand(PresenceCommand.Kind, command.ToBytes());
+        }
+
         /// <summary>Called by the policy sync system with a policy the local player set on a building, district or line.</summary>
         public void SendPolicy(PolicyCommand command)
         {
@@ -137,6 +150,31 @@ namespace Multiplayer
 
         private void OnGameplayCommand(GameplayCommandMessage message)
         {
+            if (message.Kind == PresenceCommand.Kind)
+            {
+                try
+                {
+                    PresenceCommand presence = PresenceCommand.FromBytes(message.Payload);
+                    string name = null;
+                    foreach (PlayerInfo player in Session.Players)
+                    {
+                        if (player.PlayerId == message.OriginPlayerId)
+                        {
+                            name = player.Name;
+                            break;
+                        }
+                    }
+
+                    Sync.PresenceStore.Receive(message.OriginPlayerId, name, presence, Now);
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn("Bad presence from player " + message.OriginPlayerId + ": " + ex.Message);
+                }
+
+                return;
+            }
+
             if (message.Kind == PolicyCommand.Kind)
             {
                 try

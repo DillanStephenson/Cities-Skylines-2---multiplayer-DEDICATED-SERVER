@@ -8,10 +8,13 @@ Play one city with friends. A small server program holds the city and passes eve
 
 - Roads, buildings, zoning, bulldozing, terrain, districts and transit lines you place show up on everyone's screen straight away.
 - Taxes, budgets, service fees, city policies and building options sync too.
-- The host saves the city to the server. Anyone joining gets that copy and loads it.
+- You see where the others are: a ring on the map where each player is looking, a dot under their mouse, and their name over it.
+- Anyone can save the city to the server. Whoever joins gets the latest copy and loads it.
 - Any mods are fine as long as everyone runs the same playset. A server can follow a public Paradox playset and tell people exactly what they are missing.
 
-What it does not do: the simulation still runs on each PC. Citizens, traffic and money drift apart a bit over time. The host's saves pull everyone back to the same state.
+![Another player's marker](docs/img/marker.jpg)
+
+The simulation itself still runs on each PC, so citizens and traffic are not identical everywhere. The money is: one player's balance is sent round every five seconds and everyone runs with it. For the rest, a save from anyone brings the others back to the same city, on request or automatically if you turn that on in the options.
 
 ## Playing
 
@@ -29,7 +32,7 @@ In a city, the round button at the top of the right-hand stack opens the panel.
 
 ![In-game panel](docs/img/ingame-panel.png)
 
-**Save to server** uploads the city you are playing (host only). The host also saves every 5 minutes on its own (Options > Multiplayer to change it). Nothing is saved to the server when you quit, so press it before you leave.
+**Save to server** uploads the city you are playing. Anyone can. The host (or the longest-connected player when there is no host) also saves every 5 minutes on its own; Options > Multiplayer changes that, and has a switch to reload automatically whenever someone else saves. Nothing is saved to the server when you quit, so press it before you leave.
 
 ## The server window
 

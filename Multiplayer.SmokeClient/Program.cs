@@ -68,6 +68,9 @@ namespace Multiplayer.SmokeClient
             var clockForEcho = Stopwatch.StartNew();
             bool echoState = Arg(args, "-echo-state", null) != null;
             bool echoPolicy = Arg(args, "-echo-policy", null) != null;
+            string presenceText = Arg(args, "-echo-presence", null);
+            float presenceOffset = presenceText != null ? float.Parse(presenceText, System.Globalization.CultureInfo.InvariantCulture) : float.NaN;
+            long lastPresenceEchoMs = 0;
             session.GameplayCommandReceived += command =>
             {
                 Console.WriteLine("command " + command.Kind + " from " + command.OriginPlayerId + " (" + command.Payload.Length + " bytes)");
@@ -98,6 +101,27 @@ namespace Multiplayer.SmokeClient
                     catch (Exception ex)
                     {
                         Console.WriteLine("  could not decode city state: " + ex.Message);
+                    }
+
+                    return;
+                }
+
+                if (command.Kind == Multiplayer.Core.Build.PresenceCommand.Kind)
+                {
+                    if (!float.IsNaN(presenceOffset) && clockForEcho.ElapsedMilliseconds - lastPresenceEchoMs > 250)
+                    {
+                        try
+                        {
+                            var presence = Multiplayer.Core.Build.PresenceCommand.FromBytes(command.Payload);
+                            presence.Pivot.X += presenceOffset;
+                            presence.Cursor.X += presenceOffset;
+                            session.SendGameplayCommand(Multiplayer.Core.Build.PresenceCommand.Kind, presence.ToBytes());
+                            lastPresenceEchoMs = clockForEcho.ElapsedMilliseconds;
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine("  could not decode presence: " + ex.Message);
+                        }
                     }
 
                     return;

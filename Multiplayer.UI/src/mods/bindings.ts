@@ -23,6 +23,8 @@ export const worldStatus$ = bindValue<string>(GROUP, "worldStatus", "");
 export const lastError$ = bindValue<string>(GROUP, "lastError", "");
 export const recent$ = bindValue<string>(GROUP, "recent", "");
 export const newerCity$ = bindValue<boolean>(GROUP, "newerCity", false);
+/** JSON list of the other players' name tags with screen positions, refreshed every other frame while in a city. */
+export const presence$ = bindValue<string>(GROUP, "presence", "");
 /** True while the city is being saved and uploaded, or downloaded and loaded. */
 export const transferBusy$ = bindValue<boolean>(GROUP, "transferBusy", false);
 /** "join", "host", "choice" or "panel" when the C# side wants a screen opened without a click (dev trigger). */

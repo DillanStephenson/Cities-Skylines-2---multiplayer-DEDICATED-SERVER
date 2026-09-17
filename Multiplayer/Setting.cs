@@ -105,6 +105,9 @@ namespace Multiplayer
         [SettingsUISection(kSection, kSessionGroup)]
         public int AutoUploadMinutes { get; set; }
 
+        [SettingsUISection(kSection, kSessionGroup)]
+        public bool FollowSaves { get; set; }
+
         /// <summary>Read-only text block; the settings UI renders getter-only strings with this attribute as multiline text.</summary>
         [SettingsUIMultilineText]
         [SettingsUISection(kSection, kSessionGroup)]
@@ -124,6 +127,7 @@ namespace Multiplayer
             JoinPassword = string.Empty;
             JoinOwnerKey = string.Empty;
             AutoUploadMinutes = 5;
+            FollowSaves = false;
         }
     }
 
@@ -174,7 +178,9 @@ namespace Multiplayer
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.FetchCity)), "Get the shared city" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.FetchCity)), "Download the server's city and load it. Happens by itself from the main menu or when you join for the first time." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.AutoUploadMinutes)), "Auto-upload every (minutes)" },
-                { m_Setting.GetOptionDescLocaleID(nameof(Setting.AutoUploadMinutes)), "Host only: how often the city is saved and pushed to the server while you play. 0 turns it off." },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.AutoUploadMinutes)), "How often the city is saved to the server on its own while you play. The host does it, or the longest-connected player when no host is on. 0 turns it off." },
+                { m_Setting.GetOptionLabelLocaleID(nameof(Setting.FollowSaves)), "Reload when someone else saves" },
+                { m_Setting.GetOptionDescLocaleID(nameof(Setting.FollowSaves)), "When another player saves the city to the server, download it and reload straight away (about a minute of loading). Off: the panel tells you and you fetch it when you like." },
                 { m_Setting.GetOptionLabelLocaleID(nameof(Setting.Status)), "Status" },
                 { m_Setting.GetOptionDescLocaleID(nameof(Setting.Status)), "Connection state, players and recent events." },
             };
