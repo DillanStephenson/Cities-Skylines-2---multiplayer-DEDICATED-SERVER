@@ -146,16 +146,30 @@ namespace Multiplayer.Server
             session.SimulationSpeedChanged += (speed, p) => view.Append("speed " + ConsoleView.FormatSpeed(speed) + (p != null ? " requested by " + p.Name : " set from console"), ConsoleColor.Cyan);
             session.GameplayCommandRelayed += c =>
             {
-                string detail = c.Kind + " from player " + c.OriginPlayerId + " (" + c.Payload.Length + " bytes)";
-                if (c.Kind == Multiplayer.Core.Build.BuildCommand.Kind)
+                if (c.Kind == Multiplayer.Core.Build.PresenceCommand.Kind)
                 {
-                    try
+                    // Several a second per player while they pan about; not worth a line each.
+                    return;
+                }
+
+                string detail = c.Kind + " from player " + c.OriginPlayerId + " (" + c.Payload.Length + " bytes)";
+                try
+                {
+                    if (c.Kind == Multiplayer.Core.Build.BuildCommand.Kind)
                     {
                         detail = Multiplayer.Core.Build.BuildCommand.FromBytes(c.Payload) + " from player " + c.OriginPlayerId;
                     }
-                    catch (Exception)
+                    else if (c.Kind == Multiplayer.Core.Build.ModDataCommand.Kind)
                     {
+                        detail = "mod data " + Multiplayer.Core.Build.ModDataCommand.FromBytes(c.Payload) + " from player " + c.OriginPlayerId;
                     }
+                    else if (c.Kind == Multiplayer.Core.Build.BuildResultCommand.Kind)
+                    {
+                        detail = "result " + Multiplayer.Core.Build.BuildResultCommand.FromBytes(c.Payload) + " from player " + c.OriginPlayerId;
+                    }
+                }
+                catch (Exception)
+                {
                 }
 
                 view.Append("relayed " + detail, ConsoleColor.DarkGray);

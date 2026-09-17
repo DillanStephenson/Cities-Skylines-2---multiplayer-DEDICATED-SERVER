@@ -72,9 +72,53 @@ namespace Multiplayer.SmokeClient
             string presenceText = Arg(args, "-echo-presence", null);
             float presenceOffset = presenceText != null ? float.Parse(presenceText, System.Globalization.CultureInfo.InvariantCulture) : float.NaN;
             long lastPresenceEchoMs = 0;
+            string modDataText = Arg(args, "-echo-moddata", null);
+            float modDataOffset = modDataText != null ? float.Parse(modDataText, System.Globalization.CultureInfo.InvariantCulture) : float.NaN;
             session.GameplayCommandReceived += command =>
             {
                 Console.WriteLine("command " + command.Kind + " from " + command.OriginPlayerId + " (" + command.Payload.Length + " bytes)");
+                if (command.Kind == Multiplayer.Core.Build.ModDataCommand.Kind)
+                {
+                    try
+                    {
+                        var data = Multiplayer.Core.Build.ModDataCommand.FromBytes(command.Payload);
+                        Console.WriteLine("  " + data + ", " + data.Data.Length + " bytes, " + data.Entities.Count + " entity refs");
+                        if (!float.IsNaN(modDataOffset))
+                        {
+                            data.Target.Position.X += modDataOffset;
+                            data.Target.Aux.X += modDataOffset;
+                            foreach (var patch in data.Entities)
+                            {
+                                patch.Ref.Position.X += modDataOffset;
+                                patch.Ref.Aux.X += modDataOffset;
+                            }
+
+                            pendingEchoes.Enqueue((clockForEcho.ElapsedMilliseconds + 1500, data.ToBytes(), Multiplayer.Core.Build.ModDataCommand.Kind));
+                            Console.WriteLine("  will echo it back shifted by " + modDataOffset + " m on X in 1.5 s");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("  could not decode mod data: " + ex.Message);
+                    }
+
+                    return;
+                }
+
+                if (command.Kind == Multiplayer.Core.Build.BuildResultCommand.Kind)
+                {
+                    try
+                    {
+                        Console.WriteLine("  " + Multiplayer.Core.Build.BuildResultCommand.FromBytes(command.Payload));
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("  could not decode build result: " + ex.Message);
+                    }
+
+                    return;
+                }
+
                 if (command.Kind == Multiplayer.Core.Build.CityStateCommand.Kind)
                 {
                     try

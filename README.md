@@ -8,6 +8,7 @@ Play one city with friends. A small server program holds the city and passes eve
 
 - Roads, buildings, zoning, bulldozing, terrain, districts and transit lines you place show up on everyone's screen straight away.
 - Taxes, budgets, service fees, city policies and building options sync too.
+- Traffic Tool Essentials settings (junction signals, phases, lane groups, lane directions, labels, depot zones) follow whoever changes them, as long as everyone has the mod.
 - You see where the others are: a ring on the map where each player is looking, a dot under their mouse, and their name over it.
 - Anyone can save the city to the server. Whoever joins gets the latest copy and loads it.
 - Any mods are fine as long as everyone runs the same playset. A server can follow a public Paradox playset and tell people exactly what they are missing.

@@ -56,6 +56,7 @@ namespace Multiplayer.Sync
         private PrefabBase m_SavedPrefab;
         private int m_InjectedCount;
         private int m_Batched;
+        private string m_Problem;
         private int m_Replayed;
         private int m_Failed;
         private readonly List<Entity> m_Injected = new List<Entity>();
@@ -153,6 +154,7 @@ namespace Multiplayer.Sync
                     {
                         Mod.log.Warn("Replay of " + m_Current.Command + ": the game generated nothing from " + m_InjectedCount + " definitions");
                         m_Failed++;
+                        Report(false, "the game here made nothing of it");
                         Finish();
                         return;
                     }
@@ -163,6 +165,7 @@ namespace Multiplayer.Sync
                         if (blocking)
                         {
                             Mod.log.Warn("Replay of " + m_Current.Command + ": " + errors + " of " + temps + " temp entities failed validation here; those parts will not be built" + details);
+                            m_Problem = errors + " of " + temps + " parts failed validation here" + details;
                         }
                         else
                         {
@@ -180,6 +183,7 @@ namespace Multiplayer.Sync
                 case Phase.Applied:
                     m_Replayed += 1 + m_Batched;
                     Mod.log.Info("Replayed " + m_Current.Command + " from player " + m_Current.FromPlayer + " (" + m_InjectedCount + " definitions" + (m_Batched > 0 ? ", " + m_Batched + " more stroke command(s) with it" : "") + ")");
+                    Report(m_Problem == null, m_Problem ?? string.Empty);
                     Finish();
                     return;
             }
@@ -281,6 +285,7 @@ namespace Multiplayer.Sync
             var problems = new StringBuilder();
             m_InjectedCount = 0;
             m_Batched = 0;
+            m_Problem = null;
             m_Injected.Clear();
             InjectDefinitions(m_Current.Command, problems);
 
@@ -303,11 +308,38 @@ namespace Multiplayer.Sync
             {
                 Mod.log.Warn("Replay of " + m_Current.Command + " skipped: nothing could be recreated here");
                 m_Failed++;
+                Report(false, "nothing could be recreated here" + (problems.Length > 0 ? ": " + problems : ""));
                 Finish();
                 return;
             }
 
             m_Phase = Phase.Injected;
+        }
+
+        /// <summary>Tell the builder how their command fared here. Nothing goes back for our own (dev) commands.</summary>
+        private void Report(bool ok, string message)
+        {
+            MultiplayerService service = Mod.Service;
+            if (service == null || m_Current == null || m_Current.FromPlayer == service.Session.LocalPlayerId)
+            {
+                return;
+            }
+
+            try
+            {
+                service.SendBuildResult(new BuildResultCommand
+                {
+                    Sequence = m_Current.Command.Sequence,
+                    BuilderPlayerId = m_Current.FromPlayer,
+                    ToolId = m_Current.Command.ToolId,
+                    Ok = ok,
+                    Message = message ?? string.Empty,
+                });
+            }
+            catch (Exception ex)
+            {
+                Mod.log.Warn("Could not report the replay result: " + ex.Message);
+            }
         }
 
         private void InjectDefinitions(BuildCommand command, StringBuilder problems)

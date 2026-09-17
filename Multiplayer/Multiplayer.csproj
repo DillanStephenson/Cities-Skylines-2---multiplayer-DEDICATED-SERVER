@@ -2,7 +2,9 @@
 
 	<PropertyGroup>
 		<Configurations>Debug;Release</Configurations>
-	
+		<!-- Sync/ModDataSyncSystem.cs copies other mods' component structs as raw bytes. -->
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
 		<!--The file where mod information which is required for publishing mod on PDX mods are stored-->
 		<PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
 	</PropertyGroup>

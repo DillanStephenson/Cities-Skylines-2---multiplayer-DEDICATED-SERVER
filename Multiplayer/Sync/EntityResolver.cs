@@ -33,6 +33,7 @@ namespace Multiplayer.Sync
         private const float AreaTolerance = 4f;
         private const float BlockTolerance = 6f;
         private const float WaypointTolerance = 2.5f;
+        private const float LaneTolerance = 1.5f;
         // Height only breaks ties (an overpass above a road): the game re-samples terrain heights when it
         // builds, and a save loaded on two PCs can legitimately differ by many metres on slopes.
         private const float HeightTolerance = 100f;
@@ -48,6 +49,7 @@ namespace Multiplayer.Sync
         private readonly EntityQuery _blocks;
         private readonly EntityQuery _routes;
         private readonly EntityQuery _waypoints;
+        private readonly EntityQuery _lanes;
 
         public EntityResolver(World world, PrefabSystem prefabs)
         {
@@ -86,6 +88,11 @@ namespace Multiplayer.Sync
             _waypoints = _entities.CreateEntityQuery(new EntityQueryDesc
             {
                 All = new[] { ComponentType.ReadOnly<RouteWaypoint>(), ComponentType.ReadOnly<RoutePosition>() },
+                None = new[] { ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<Deleted>() },
+            });
+            _lanes = _entities.CreateEntityQuery(new EntityQueryDesc
+            {
+                All = new[] { ComponentType.ReadOnly<Lane>(), ComponentType.ReadOnly<Curve>(), ComponentType.ReadOnly<PrefabRef>() },
                 None = new[] { ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<Deleted>() },
             });
         }
@@ -202,6 +209,15 @@ namespace Multiplayer.Sync
             {
                 reference.Kind = EntityKind.Waypoint;
                 reference.Position = ToVec(_entities.GetComponentData<RoutePosition>(entity).m_Position);
+                return reference;
+            }
+
+            if (_entities.HasComponent<Lane>(entity) && _entities.HasComponent<Curve>(entity))
+            {
+                Bezier4x3 curve = _entities.GetComponentData<Curve>(entity).m_Bezier;
+                reference.Kind = EntityKind.Lane;
+                reference.Position = ToVec(MathUtils.Position(curve, 0.5f));
+                reference.Aux = ToVec(curve.a);
                 return reference;
             }
 
@@ -401,6 +417,48 @@ namespace Multiplayer.Sync
                     }
 
                     break;
+                }
+
+                case EntityKind.Lane:
+                {
+                    // Lanes are dense (a junction has dozens), so the start point counts as much as the midpoint.
+                    float3 aux = ToFloat3(reference.Aux);
+                    using (NativeArray<Entity> entities = _lanes.ToEntityArray(Allocator.Temp))
+                    using (NativeArray<Curve> curves = _lanes.ToComponentDataArray<Curve>(Allocator.Temp))
+                    using (NativeArray<PrefabRef> prefabs = _lanes.ToComponentDataArray<PrefabRef>(Allocator.Temp))
+                    {
+                        for (int i = 0; i < entities.Length; i++)
+                        {
+                            Bezier4x3 curve = curves[i].m_Bezier;
+                            float distance = PlaneDistance(MathUtils.Position(curve, 0.5f), target);
+                            if (distance > LaneTolerance)
+                            {
+                                continue;
+                            }
+
+                            float startDistance = PlaneDistance(curve.a, aux);
+                            if (startDistance > LaneTolerance * 2f)
+                            {
+                                continue;
+                            }
+
+                            float score = distance + startDistance + HeightPenalty(MathUtils.Position(curve, 0.5f), target)
+                                + (prefab != Entity.Null && prefabs[i].m_Prefab != prefab ? LaneTolerance : 0f);
+                            if (score < bestScore)
+                            {
+                                bestScore = score;
+                                best = entities[i];
+                            }
+                        }
+                    }
+
+                    break;
+                }
+
+                case EntityKind.ModEntity:
+                {
+                    failure = "mod entities are resolved by the mod data sync, not here";
+                    return Entity.Null;
                 }
 
                 case EntityKind.Waypoint:

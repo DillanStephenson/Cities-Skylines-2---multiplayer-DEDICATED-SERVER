@@ -22,6 +22,9 @@ namespace Multiplayer
         /// <summary>Opens a screen without clicking, for screenshots: "choice", "join" or "host" (main menu) or "panel" (in a city).</summary>
         public const string UiFile = "dev-ui.txt";
 
+        /// <summary>Once in a city and connected, give one junction a Traffic Tool Essentials pattern so the mod data sync sends it.</summary>
+        public const string ModDataTestFile = "dev-moddata.txt";
+
         public static void Apply(MultiplayerService service, Setting settings)
         {
             if (service == null || settings == null)
@@ -39,6 +42,12 @@ namespace Multiplayer
                 {
                     Mod.log.Info(BuildTestFile + " present: a test road will be built once in a city and connected");
                     service.RequestDevBuild();
+                }
+
+                if (File.Exists(Path.Combine(directory, ModDataTestFile)))
+                {
+                    Mod.log.Info(ModDataTestFile + " present: a junction gets a Traffic Tool Essentials pattern once in a city and connected");
+                    service.RequestDevModData();
                 }
 
                 string uiFile = Path.Combine(directory, UiFile);

@@ -148,8 +148,89 @@ namespace Multiplayer
             _log.Info("Sent " + command);
         }
 
+        private int _modDataSent;
+        private int _modDataReceived;
+
+        /// <summary>Called by the mod data sync system with another mod's settings the local player changed on an entity.</summary>
+        public void SendModData(ModDataCommand command)
+        {
+            byte[] bytes = command.ToBytes();
+            Session.SendGameplayCommand(ModDataCommand.Kind, bytes);
+            _modDataSent++;
+            _log.Info("Sent mod data: " + command + " (" + bytes.Length + " bytes, " + command.Entities.Count + " entity refs)");
+        }
+
+        /// <summary>Called by the replay system once someone else's build has been applied here, or could not be.</summary>
+        public void SendBuildResult(BuildResultCommand result)
+        {
+            Session.SendGameplayCommand(BuildResultCommand.Kind, result.ToBytes());
+        }
+
+        /// <summary>The name a player id currently goes by, or "player N" when unknown.</summary>
+        public string PlayerName(int playerId)
+        {
+            foreach (PlayerInfo player in Session.Players)
+            {
+                if (player.PlayerId == playerId)
+                {
+                    return player.Name;
+                }
+            }
+
+            return "player " + playerId;
+        }
+
         private void OnGameplayCommand(GameplayCommandMessage message)
         {
+            if (message.Kind == ModDataCommand.Kind)
+            {
+                try
+                {
+                    ModDataCommand data = ModDataCommand.FromBytes(message.Payload);
+                    _modDataReceived++;
+                    World world = World.DefaultGameObjectInjectionWorld;
+                    Sync.ModDataSyncSystem system = world != null ? world.GetExistingSystemManaged<Sync.ModDataSyncSystem>() : null;
+                    if (system != null)
+                    {
+                        system.Receive(data);
+                    }
+
+                    _log.Info("Received mod data: " + data + " from " + PlayerName(message.OriginPlayerId));
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn("Bad mod data from player " + message.OriginPlayerId + ": " + ex.Message);
+                }
+
+                return;
+            }
+
+            if (message.Kind == BuildResultCommand.Kind)
+            {
+                try
+                {
+                    BuildResultCommand result = BuildResultCommand.FromBytes(message.Payload);
+                    if (result.BuilderPlayerId == Session.LocalPlayerId)
+                    {
+                        string who = PlayerName(message.OriginPlayerId);
+                        if (result.Ok)
+                        {
+                            _log.Info(who + " built your " + result.ToolId + " #" + result.Sequence + (result.Message.Length > 0 ? " (" + result.Message + ")" : ""));
+                        }
+                        else
+                        {
+                            Note(who + " could not build your " + result.ToolId + " #" + result.Sequence + ": " + result.Message);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn("Bad build result from player " + message.OriginPlayerId + ": " + ex.Message);
+                }
+
+                return;
+            }
+
             if (message.Kind == PresenceCommand.Kind)
             {
                 try
@@ -255,6 +336,46 @@ namespace Multiplayer
         public void RequestDevBuild()
         {
             _devBuildRequested = true;
+        }
+
+        private bool _devModDataRequested;
+        private long _devModDataAtMs = -1;
+
+        /// <summary>Dev trigger: give one junction a Traffic Tool Essentials pattern once in a city, so the mod data sync has something to send.</summary>
+        public void RequestDevModData()
+        {
+            _devModDataRequested = true;
+        }
+
+        private void RunDevModDataIfDue()
+        {
+            if (!_devModDataRequested || Session.State != SessionState.Connected)
+            {
+                return;
+            }
+
+            GameManager manager = GameManager.instance;
+            if (manager == null || manager.gameMode != GameMode.Game || manager.isGameLoading)
+            {
+                return;
+            }
+
+            if (_devModDataAtMs < 0)
+            {
+                // Let the sync take its first snapshot of the city before the change is made.
+                _devModDataAtMs = Now + 8000;
+                return;
+            }
+
+            if (Now < _devModDataAtMs)
+            {
+                return;
+            }
+
+            _devModDataRequested = false;
+            World world = World.DefaultGameObjectInjectionWorld;
+            Sync.ModDataSyncSystem system = world != null ? world.GetExistingSystemManaged<Sync.ModDataSyncSystem>() : null;
+            Note("Dev mod data: " + (system != null ? system.DevSetTestPattern() : "sync system missing"));
         }
 
         private void RunDevBuildIfDue()
@@ -535,6 +656,7 @@ namespace Multiplayer
                 PollSpawnedServer();
                 WorldSync.Update(Now);
                 RunDevBuildIfDue();
+                RunDevModDataIfDue();
             }
             catch (Exception ex)
             {
@@ -825,6 +947,10 @@ namespace Multiplayer
                 }
 
                 builder.Append("; city settings: sent ").Append(_stateSent).Append(", received ").Append(_stateReceived);
+                if (_modDataSent > 0 || _modDataReceived > 0)
+                {
+                    builder.Append("; mod settings: sent ").Append(_modDataSent).Append(", received ").Append(_modDataReceived);
+                }
             }
 
             if (_recent.Count > 0)

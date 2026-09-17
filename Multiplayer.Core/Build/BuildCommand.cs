@@ -187,6 +187,14 @@ namespace Multiplayer.Core.Build
 
         /// <summary>A waypoint or stop of a transport line, by position.</summary>
         Waypoint = 7,
+
+        /// <summary>A lane inside a road or junction (what per-lane mod settings hang off), by curve midpoint and start.</summary>
+        Lane = 8,
+
+        /// <summary>An entity another mod created on its own (a depot zone, a settings singleton): the mod's identity
+        /// component type name in Prefab.Name, its position field in Position when it has one.</summary>
+        ModEntity = 9,
+
         Unresolvable = 255,
     }
 
