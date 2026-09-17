@@ -184,6 +184,12 @@
 
 // ---------------------------------------------------------------- in-game toolbar button and panel
 
+.gameToggleWrap {
+  display: flex;
+  margin: 0;
+  padding: 0;
+}
+
 .gameToggle {
   position: relative;
   width: 36rem;

@@ -1,24 +1,30 @@
 import { useValue } from "cs2/api";
 import { Button } from "cs2/ui";
-import { useEffect } from "react";
 import * as b from "./bindings";
 import styles from "./multiplayer.module.scss";
 
-/** Round button in the bottom-right toolbar; a green dot shows while connected. */
+/**
+ * Round button in the bottom-right toolbar; a green dot shows while connected. The click is taken both
+ * through the game's onSelect and a plain onClick, whichever the toolbar lets through; the C# side ignores
+ * the second of two toggles in the same instant, so one click is always one toggle.
+ */
 export const GameToolbarButton = () => {
   const online = useValue(b.online$);
   const open = useValue(b.panelOpen$);
-  const requested = useValue(b.requestedView$);
-  useEffect(() => {
-    if (requested === "panel") {
-      b.panelOpen$.update(true);
-    }
-  }, [requested]);
   return (
-    <Button variant="floating" className={open ? styles.gameToggle + " " + styles.gameToggleOpen : styles.gameToggle} onSelect={b.togglePanel} tooltipLabel="Multiplayer">
-      <img src="Media/Glyphs/Passenger.svg" className={styles.gameToggleIcon} />
-      {online && <div className={styles.gameDot} />}
-    </Button>
+    <div
+      className={styles.gameToggleWrap}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        b.togglePanel();
+      }}
+    >
+      <Button variant="floating" className={open ? styles.gameToggle + " " + styles.gameToggleOpen : styles.gameToggle} onSelect={b.togglePanel} tooltipLabel="Multiplayer">
+        <img src="Media/Glyphs/Passenger.svg" className={styles.gameToggleIcon} />
+        {online && <div className={styles.gameDot} />}
+      </Button>
+    </div>
   );
 };
 

@@ -39,6 +39,21 @@ namespace Multiplayer
         private ValueBinding<string> m_Recent;
         private ValueBinding<bool> m_NewerCity;
         private ValueBinding<bool> m_HostChoice;
+        private ValueBinding<bool> m_PanelOpen;
+        private int m_LastToggleTick;
+
+        /// <summary>The toolbar button (or the panel's close cross) was clicked. Two toggles within a blink count as one click.</summary>
+        private void TogglePanel()
+        {
+            int now = Environment.TickCount;
+            if (now - m_LastToggleTick < 200)
+            {
+                return;
+            }
+
+            m_LastToggleTick = now;
+            m_PanelOpen.Update(!m_PanelOpen.value);
+        }
         private ValueBinding<string> m_RequestedView;
         private ValueBinding<bool> m_TransferBusy;
         private ValueBinding<string> m_Presence;
@@ -85,6 +100,8 @@ namespace Multiplayer
             AddBinding(m_Recent = new ValueBinding<string>(Group, "recent", string.Empty));
             AddBinding(m_NewerCity = new ValueBinding<bool>(Group, "newerCity", false));
             AddBinding(m_HostChoice = new ValueBinding<bool>(Group, "hostChoice", false));
+            AddBinding(m_PanelOpen = new ValueBinding<bool>(Group, "panelOpen", false));
+            AddBinding(new TriggerBinding(Group, "togglePanel", TogglePanel));
             AddBinding(m_RequestedView = new ValueBinding<string>(Group, "requestedView", string.Empty));
             AddBinding(m_TransferBusy = new ValueBinding<bool>(Group, "transferBusy", false));
             AddBinding(m_Presence = new ValueBinding<string>(Group, "presence", string.Empty));
@@ -127,7 +144,12 @@ namespace Multiplayer
             }
 
             GameManager manager = GameManager.instance;
-            m_InGame.Update(manager != null && manager.gameMode == GameMode.Game);
+            bool inGame = manager != null && manager.gameMode == GameMode.Game;
+            m_InGame.Update(inGame);
+            if (!inGame && m_PanelOpen.value)
+            {
+                m_PanelOpen.Update(false);
+            }
 
             MultiplayerService service = Mod.Service;
             if (service == null)
@@ -269,6 +291,7 @@ namespace Multiplayer
                 }
 
                 m_RequestedView.Update("panel");
+                m_PanelOpen.Update(true);
                 m_PendingView = null;
                 return;
             }

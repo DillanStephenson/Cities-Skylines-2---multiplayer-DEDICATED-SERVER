@@ -1,4 +1,4 @@
-import { bindLocalValue, bindValue, trigger } from "cs2/api";
+import { bindValue, trigger } from "cs2/api";
 
 // Must match MultiplayerUISystem.Group and its binding names on the C# side.
 const GROUP = "multiplayer";
@@ -32,9 +32,9 @@ export const transferBusy$ = bindValue<boolean>(GROUP, "transferBusy", false);
 /** "join", "host", "choice" or "panel" when the C# side wants a screen opened without a click (dev trigger). */
 export const requestedView$ = bindValue<string>(GROUP, "requestedView", "");
 
-/** UI-only: whether the in-game panel is open. Shared between the toolbar button and the panel. */
-export const panelOpen$ = bindLocalValue<boolean>(false);
-export const togglePanel = () => panelOpen$.update(!panelOpen$.value);
+/** Whether the in-game panel is open. Kept on the C# side so the toolbar button and the panel always agree. */
+export const panelOpen$ = bindValue<boolean>(GROUP, "panelOpen", false);
+export const togglePanel = () => trigger(GROUP, "togglePanel");
 
 export const setPlayerName = (value: string) => trigger(GROUP, "setPlayerName", value);
 export const setHostPort = (value: string) => trigger(GROUP, "setHostPort", value);
