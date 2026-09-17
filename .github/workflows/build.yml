@@ -43,7 +43,7 @@ jobs:
           dotnet publish Multiplayer.Server/Multiplayer.Server.csproj -f net8.0 -r ${{ matrix.rid }} --self-contained \
             -p:PublishSingleFile=true -p:DebugType=none -o out/${{ matrix.rid }} --nologo -v minimal
           cp deploy/vps/README.md out/${{ matrix.rid }}/README-linux.md
-          cp deploy/vps/setup-vps.sh deploy/vps/cs2-multiplayer.service out/${{ matrix.rid }}/
+          cp deploy/vps/setup-vps.sh deploy/vps/cs2-multiplayer.service deploy/server.example.json out/${{ matrix.rid }}/
           cd out/${{ matrix.rid }} && zip -r ../cs2-multiplayer-server-${{ matrix.rid }}-${{ github.ref_name }}.zip .
       - name: Attach to the release
         uses: softprops/action-gh-release@v2

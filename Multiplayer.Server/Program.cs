@@ -23,11 +23,12 @@ namespace Multiplayer.Server
             FileLog.Write("Started with: " + string.Join(" ", args));
 
             ServerOptions options;
+            var settingsWarnings = new List<string>();
             try
             {
-                options = ServerOptions.Parse(args);
+                options = ServerOptions.Parse(args, settingsWarnings);
             }
-            catch (ArgumentException ex)
+            catch (Exception ex) when (ex is ArgumentException || ex is FormatException)
             {
                 FileLog.Write("Bad arguments: " + ex.Message);
                 Console.Error.WriteLine(ex.Message);
@@ -43,6 +44,16 @@ namespace Multiplayer.Server
             }
             catch (Exception)
             {
+            }
+
+            if (options.ConfigPath.Length > 0)
+            {
+                view.Append("Settings from " + options.ConfigPath + " (edit and save; changes apply within ten seconds).");
+            }
+
+            foreach (string warning in settingsWarnings)
+            {
+                view.Append(warning, ConsoleColor.Yellow);
             }
 
             var config = new ServerConfig
@@ -103,6 +114,12 @@ namespace Multiplayer.Server
                 view.Append("World storage unavailable (" + ex.Message + "); the world will live in memory only.", ConsoleColor.Yellow);
             }
 
+            if (options.PlaysetId == 0 && options.RequiredMods.Count > 0)
+            {
+                session.SetReferenceMods(options.RequiredMods, "server.json", locked: true);
+                view.Append("Required mods from server.json: " + options.RequiredMods.Count + " (players must run these; the host's own list is not used).", ConsoleColor.Cyan);
+            }
+
             session.WorldChanged += snapshot =>
             {
                 view.Append("World updated: " + snapshot.Info + " uploaded by " + snapshot.Info.UploaderName, ConsoleColor.Green);
@@ -116,6 +133,13 @@ namespace Multiplayer.Server
             };
 
             session.PlayerJoined += p => view.Append("+ " + p + " joined (" + session.Players.Count + " online)", ConsoleColor.Green);
+            session.PlayerJoined += p =>
+            {
+                if (options.Welcome.Length > 0)
+                {
+                    session.Tell(p.PlayerId, options.Welcome);
+                }
+            };
             session.PlayerLeft += (p, reason) => view.Append("- " + p + " left: " + reason + " (" + session.Players.Count + " online)", ConsoleColor.Yellow);
             session.ChatReceived += (p, text) => view.Append("<" + p.Name + "> " + text, ConsoleColor.White);
             session.SimulationSpeedChanged += (speed, p) => view.Append("speed " + ConsoleView.FormatSpeed(speed) + (p != null ? " requested by " + p.Name : " set from console"), ConsoleColor.Cyan);
@@ -204,6 +228,8 @@ namespace Multiplayer.Server
             updates?.Start();
             var plainReader = view.PanelMode ? null : new PlainCommandReader();
             long lastDraw = 0;
+            long lastSettingsCheck = 0;
+            DateTime settingsStamp = SettingsStamp(options.ConfigPath);
             long lastParentCheck = 0;
             long ownerGoneSince = -1;
             bool ownerEverJoined = false;
@@ -223,6 +249,17 @@ namespace Multiplayer.Server
                 while (updates != null && updates.TryTake(out release))
                 {
                     ReportRelease(release, options.UpdateRepository, session, view);
+                }
+
+                if (options.ConfigPath.Length > 0 && now - lastSettingsCheck > 10000)
+                {
+                    lastSettingsCheck = now;
+                    DateTime stamp = SettingsStamp(options.ConfigPath);
+                    if (stamp != settingsStamp)
+                    {
+                        settingsStamp = stamp;
+                        ReloadSettings(args, options, session, store, view, ref watcher);
+                    }
                 }
 
                 if (session.OwnerPlayerId != 0)
@@ -255,7 +292,7 @@ namespace Multiplayer.Server
                 }
 
                 string command = view.PanelMode ? view.PollCommand() : plainReader.TryRead();
-                if (command != null && !RunCommand(command, session, view, ref stopReason))
+                if (command != null && !RunCommand(command, session, options, view, ref stopReason))
                 {
                     stop = true;
                 }
@@ -282,6 +319,152 @@ namespace Multiplayer.Server
         }
 
         /// <summary>Returns false when the server should stop.</summary>
+        private static DateTime SettingsStamp(string path)
+        {
+            try
+            {
+                return path.Length > 0 && System.IO.File.Exists(path) ? System.IO.File.GetLastWriteTimeUtc(path) : DateTime.MinValue;
+            }
+            catch (Exception)
+            {
+                return DateTime.MinValue;
+            }
+        }
+
+        /// <summary>server.json changed on disk: apply what can change live, say what needs a restart.</summary>
+        private static void ReloadSettings(string[] args, ServerOptions options, ServerSession session, WorldStore store, ConsoleView view, ref PlaysetWatcher watcher)
+        {
+            var warnings = new List<string>();
+            ServerOptions fresh;
+            try
+            {
+                fresh = ServerOptions.Parse(args, warnings);
+            }
+            catch (Exception ex)
+            {
+                view.Append("server.json not reloaded: " + ex.Message, ConsoleColor.Yellow);
+                return;
+            }
+
+            foreach (string warning in warnings)
+            {
+                view.Append(warning, ConsoleColor.Yellow);
+            }
+
+            if (fresh.OwnerKeyGenerated)
+            {
+                fresh.OwnerKey = options.OwnerKey;
+                fresh.OwnerKeyGenerated = options.OwnerKeyGenerated;
+            }
+
+            var changed = new List<string>();
+            var restart = new List<string>();
+            if (fresh.ServerName != options.ServerName)
+            {
+                options.ServerName = fresh.ServerName;
+                session.Config.ServerName = fresh.ServerName;
+                changed.Add("name");
+            }
+
+            if (fresh.Password != options.Password)
+            {
+                options.Password = fresh.Password;
+                session.Config.Password = fresh.Password;
+                changed.Add("password");
+            }
+
+            if (fresh.MaxPlayers != options.MaxPlayers)
+            {
+                options.MaxPlayers = fresh.MaxPlayers;
+                session.Config.MaxPlayers = fresh.MaxPlayers;
+                changed.Add("maxPlayers");
+            }
+
+            if (fresh.ModCheck != options.ModCheck)
+            {
+                options.ModCheck = fresh.ModCheck;
+                session.Config.RequireMatchingMods = fresh.ModCheck != "off";
+                session.Config.IgnoreModVersions = fresh.ModCheck != "strict";
+                changed.Add("modCheck");
+            }
+
+            if (fresh.PlaysetHint != options.PlaysetHint)
+            {
+                options.PlaysetHint = fresh.PlaysetHint;
+                session.Config.PlaysetHint = fresh.PlaysetHint;
+                changed.Add("playsetHint");
+            }
+
+            if (fresh.Welcome != options.Welcome)
+            {
+                options.Welcome = fresh.Welcome;
+                changed.Add("welcome");
+            }
+
+            bool modsChanged = !SameList(fresh.RequiredMods, options.RequiredMods);
+            if (modsChanged)
+            {
+                options.RequiredMods = fresh.RequiredMods;
+                changed.Add("requiredMods");
+            }
+
+            bool playsetChanged = fresh.PlaysetId != options.PlaysetId || fresh.PlaysetPollMinutes != options.PlaysetPollMinutes;
+            if (playsetChanged)
+            {
+                options.PlaysetId = fresh.PlaysetId;
+                options.PlaysetPollMinutes = fresh.PlaysetPollMinutes;
+                changed.Add("playsetId");
+                watcher?.Dispose();
+                watcher = null;
+                if (options.PlaysetId > 0)
+                {
+                    watcher = new PlaysetWatcher(options.PlaysetId, options.PlaysetPollMinutes, view);
+                    watcher.Start();
+                }
+            }
+
+            if (options.PlaysetId == 0 && (modsChanged || playsetChanged))
+            {
+                if (options.RequiredMods.Count > 0)
+                {
+                    session.SetReferenceMods(options.RequiredMods, "server.json", locked: true);
+                    store?.SaveMods(options.RequiredMods, "server.json", view);
+                }
+                else
+                {
+                    // Back to learning the list from the host on their next join.
+                    session.SetReferenceMods(session.ReferenceMods, session.ReferencePlayset, locked: false);
+                }
+            }
+
+            if (fresh.Port != options.Port) restart.Add("port");
+            if (fresh.OwnerKey != options.OwnerKey) restart.Add("ownerKey");
+            if (fresh.GameVersion != options.GameVersion) restart.Add("gameVersion");
+            if (fresh.DataDirectory != options.DataDirectory) restart.Add("dataDir");
+            if (fresh.UpdateCheck != options.UpdateCheck || fresh.UpdateRepository != options.UpdateRepository) restart.Add("updateCheck");
+
+            view.Append("server.json reloaded" + (changed.Count > 0 ? ": " + string.Join(", ", changed) : ": nothing changed")
+                + (restart.Count > 0 ? ". Needs a restart for: " + string.Join(", ", restart) : ""), ConsoleColor.Cyan);
+        }
+
+        private static bool SameList(List<string> a, List<string> b)
+        {
+            if (a.Count != b.Count)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < a.Count; i++)
+            {
+                if (!string.Equals(a[i], b[i], StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         /// <summary>The newest GitHub release: say whether this server (and so the mod) is behind, and remember it for joiners.</summary>
         private static void ReportRelease(ReleaseInfo release, string repository, ServerSession session, ConsoleView view)
         {
@@ -330,7 +513,7 @@ namespace Multiplayer.Server
             }
         }
 
-        private static bool RunCommand(string line, ServerSession session, ConsoleView view, ref string stopReason)
+        private static bool RunCommand(string line, ServerSession session, ServerOptions options, ConsoleView view, ref string stopReason)
         {
             line = (line ?? string.Empty).Trim();
             if (line.Length == 0)
@@ -346,7 +529,16 @@ namespace Multiplayer.Server
             {
                 case "help":
                 case "?":
-                    view.Append("help | list | world | mods | version | say <text> | speed <0-3|pause> | kick <id|name> [reason] | stop");
+                    view.Append("help | list | world | mods | settings | version | say <text> | speed <0-3|pause> | kick <id|name> [reason] | stop");
+                    return true;
+
+                case "settings":
+                case "config":
+                    view.Append((options.ConfigPath.Length > 0 ? "Settings file: " + options.ConfigPath : "No settings file (server.json next to the program, or --config PATH)."));
+                    view.Append("name '" + options.ServerName + "', port " + options.Port + ", password " + (options.Password.Length > 0 ? "set" : "none") + ", max players " + options.MaxPlayers
+                        + ", game version " + (options.GameVersion.Length > 0 ? options.GameVersion : "any") + ", mod check " + options.ModCheck
+                        + ", playset " + (options.PlaysetId > 0 ? options.PlaysetId.ToString() : "none") + ", required mods " + options.RequiredMods.Count
+                        + ", welcome " + (options.Welcome.Length > 0 ? "set" : "none") + ", update check " + (options.UpdateCheck ? "on" : "off"));
                     return true;
 
                 case "world":

@@ -303,6 +303,23 @@ namespace Multiplayer.Core.Session
 
         // ------------------------------------------------------------------ console actions
 
+        /// <summary>A line from the server to one player only (welcome text, warnings).</summary>
+        public void Tell(int playerId, string text)
+        {
+            if (!IsRunning || !_peersByPlayer.TryGetValue(playerId, out Peer peer))
+            {
+                return;
+            }
+
+            text = SessionText.SanitizeChat(text);
+            if (text.Length == 0)
+            {
+                return;
+            }
+
+            SendToPeer(peer, new ChatMessage { PlayerId = ProtocolConstants.ServerPlayerId, PlayerName = Config.ServerName, Text = text });
+        }
+
         /// <summary>Chat from the console itself.</summary>
         public void Say(string text)
         {

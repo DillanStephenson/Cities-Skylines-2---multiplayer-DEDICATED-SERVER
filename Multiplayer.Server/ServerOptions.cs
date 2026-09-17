@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using Multiplayer.Core.Protocol;
 
@@ -47,6 +49,15 @@ namespace Multiplayer.Server
         /// <summary>Where the world and mod list are kept between runs. Default: a "world" folder next to the executable.</summary>
         public string DataDirectory = string.Empty;
 
+        /// <summary>The settings file in use (server.json), or empty when none was found.</summary>
+        public string ConfigPath = string.Empty;
+
+        /// <summary>Fixed required mod list from the settings file; used when no playset is followed. Empty = learn from the host.</summary>
+        public List<string> RequiredMods = new List<string>();
+
+        /// <summary>Chat line sent to every player on join; empty for none.</summary>
+        public string Welcome = string.Empty;
+
         /// <summary>Secrets may come from the environment so they never appear in a process list; arguments override.</summary>
         public const string PasswordVariable = "CS2MP_PASSWORD";
         public const string OwnerKeyVariable = "CS2MP_OWNER_KEY";
@@ -57,21 +68,56 @@ namespace Multiplayer.Server
 
         public static ServerOptions Parse(string[] args)
         {
-            var options = new ServerOptions
+            return Parse(args, new List<string>());
+        }
+
+        /// <summary>Settings come from server.json, then the environment, then the command line; each layer overrides the one before.</summary>
+        public static ServerOptions Parse(string[] args, List<string> warnings)
+        {
+            var options = new ServerOptions();
+            options.ConfigPath = FindConfigPath(args);
+            if (options.ConfigPath.Length > 0)
             {
-                Password = Environment.GetEnvironmentVariable(PasswordVariable) ?? string.Empty,
-                OwnerKey = Environment.GetEnvironmentVariable(OwnerKeyVariable) ?? string.Empty,
-                ModCheck = NormalizeModCheck(Environment.GetEnvironmentVariable(ModCheckVariable)),
-                PlaysetHint = (Environment.GetEnvironmentVariable(PlaysetVariable) ?? string.Empty).Trim(),
-                PlaysetId = ParseOptionalInt(Environment.GetEnvironmentVariable(PlaysetIdVariable)),
-                UpdateCheck = NormalizeModCheck(Environment.GetEnvironmentVariable(UpdateCheckVariable) ?? "on") != "off",
-            };
+                ServerConfigFile.Load(options.ConfigPath, options, warnings);
+            }
+
+            string env;
+            if (!string.IsNullOrEmpty(env = Environment.GetEnvironmentVariable(PasswordVariable)))
+            {
+                options.Password = env;
+            }
+
+            if (!string.IsNullOrEmpty(env = Environment.GetEnvironmentVariable(OwnerKeyVariable)))
+            {
+                options.OwnerKey = env;
+            }
+
+            if (!string.IsNullOrEmpty(env = Environment.GetEnvironmentVariable(ModCheckVariable)))
+            {
+                options.ModCheck = NormalizeModCheck(env);
+            }
+
+            if (!string.IsNullOrEmpty(env = Environment.GetEnvironmentVariable(PlaysetVariable)))
+            {
+                options.PlaysetHint = env.Trim();
+            }
+
+            if (ParseOptionalInt(Environment.GetEnvironmentVariable(PlaysetIdVariable)) > 0)
+            {
+                options.PlaysetId = ParseOptionalInt(Environment.GetEnvironmentVariable(PlaysetIdVariable));
+            }
+
+            if (!string.IsNullOrEmpty(env = Environment.GetEnvironmentVariable(UpdateCheckVariable)))
+            {
+                options.UpdateCheck = NormalizeModCheck(env) != "off";
+            }
 
             for (int i = 0; i < args.Length; i++)
             {
                 string key = args[i].ToLowerInvariant();
                 switch (key)
                 {
+                    case "--config": Value(args, ref i); break;
                     case "--port": options.Port = ParseInt(Value(args, ref i), "port", 1, ushort.MaxValue); break;
                     case "--password": options.Password = Value(args, ref i); break;
                     case "--password-base64": options.Password = FromBase64(Value(args, ref i)); break;
@@ -114,12 +160,34 @@ namespace Multiplayer.Server
             return options;
         }
 
+        /// <summary>--config PATH, else server.json next to the executable when it exists, else nothing.</summary>
+        private static string FindConfigPath(string[] args)
+        {
+            for (int i = 0; i + 1 < args.Length; i++)
+            {
+                if (string.Equals(args[i], "--config", StringComparison.OrdinalIgnoreCase))
+                {
+                    return Path.GetFullPath(args[i + 1]);
+                }
+            }
+
+            try
+            {
+                string beside = Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? ".", ServerConfigFile.DefaultName);
+                return File.Exists(beside) ? beside : string.Empty;
+            }
+            catch (Exception)
+            {
+                return string.Empty;
+            }
+        }
+
         public static string Usage()
         {
-            return "Multiplayer.Server [--port N] [--password P | --password-base64 B] [--owner-key K | --owner-key-base64 B]\n" +
+            return "Multiplayer.Server [--config server.json] [--port N] [--password P | --password-base64 B] [--owner-key K | --owner-key-base64 B]\n" +
                    "                   [--game-version V] [--name NAME] [--max-players N] [--parent-pid PID]\n" +
                    "                   [--exit-when-owner-leaves] [--owner-grace SECONDS] [--plain] [--mod-check strict|names|off] [--playset TEXT] [--playset-id N] [--playset-poll MIN] [--no-update-check] [--data-dir DIR]\n" +
-                   "Environment " + PasswordVariable + " and " + OwnerKeyVariable + " set the secrets without showing them in the process list.\n" +
+                   "server.json next to the program (or --config PATH) holds every setting; the environment (" + PasswordVariable + ", " + OwnerKeyVariable + " ...) and these options override it.\n" +
                    "Without an owner key one is generated and shown; enter it in the game (Join > Owner key) to be the host.";
         }
 

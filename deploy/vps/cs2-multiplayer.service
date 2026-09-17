@@ -12,7 +12,7 @@ Group=cs2mp
 # show up in a process listing.
 EnvironmentFile=/etc/cs2-multiplayer/env
 WorkingDirectory=/opt/cs2-multiplayer
-ExecStart=/opt/cs2-multiplayer/Multiplayer.Server --plain --port ${PORT} --game-version ${GAME_VERSION} --name ${SERVER_NAME} --max-players ${MAX_PLAYERS}
+ExecStart=/opt/cs2-multiplayer/Multiplayer.Server --plain --config /opt/cs2-multiplayer/server.json
 Restart=on-failure
 RestartSec=3
 # hardening, same shape as ims-api

@@ -10,7 +10,7 @@ namespace Multiplayer.Core.Protocol
         public const int ProtocolVersion = 3;
 
         /// <summary>Mod version advertised in the handshake. Keep in step with PublishConfiguration.xml.</summary>
-        public const string ModVersion = "0.2.2";
+        public const string ModVersion = "0.2.3";
 
         public const int DefaultPort = 27015;
 

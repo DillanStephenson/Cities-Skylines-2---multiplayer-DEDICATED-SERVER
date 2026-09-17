@@ -226,6 +226,32 @@ namespace Multiplayer.Core.Session
             return builder.ToString();
         }
 
+        /// <summary>
+        /// A hand-written mod entry (a settings file, a console command) in the list's shape: "125342" becomes
+        /// "Mod 125342 [pdx 125342 v0]", entries already shaped "Name [pdx ID vN]" or "Name [local]" stay, anything
+        /// else counts as a local mod by that name. Empty in, empty out.
+        /// </summary>
+        public static string NormalizeEntry(string entry)
+        {
+            string clean = (entry ?? string.Empty).Trim();
+            if (clean.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            if (int.TryParse(clean, out int id) && id > 0)
+            {
+                return ParadoxPlayset.Describe("Mod " + id, id, "0");
+            }
+
+            if (clean.IndexOf("[pdx ", StringComparison.OrdinalIgnoreCase) >= 0 || clean.EndsWith("[local]", StringComparison.OrdinalIgnoreCase))
+            {
+                return clean;
+            }
+
+            return clean.Replace('[', '(').Replace(']', ')') + " [local]";
+        }
+
         /// <summary>"Traffic Tool Essentials [pdx 125342 v5]" -> "125342"; null for anything else.</summary>
         public static string PdxId(string entry)
         {

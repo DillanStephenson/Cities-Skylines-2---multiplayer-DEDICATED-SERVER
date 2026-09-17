@@ -39,17 +39,20 @@ sudo systemctl status cs2-multiplayer
 sudo journalctl -u cs2-multiplayer -f
 ```
 
-The same lines also land in `/opt/cs2-multiplayer/Multiplayer.Server.log`. To change the password or
-game version, edit `/etc/cs2-multiplayer/env` and `sudo systemctl restart cs2-multiplayer`. Two more
-settings live there: `CS2MP_MOD_CHECK` (`names` = same mods as the host at any version, the default;
-`strict` = same versions too; `off` = no check), `CS2MP_PLAYSET`, free text added to every mod
-rejection, and `CS2MP_PLAYSET_ID`, the number of a **public Paradox playset to follow**: the window reads
-its published mod list from the Paradox Mods API on start and every 5 minutes (`--playset-poll`), makes
-it the reference, and tells connected players what was added or removed when a new public version
-appears. With a linked playset the host's own list no longer replaces the reference; the host is warned
-instead when their game differs from what is published, which means "press Update public version". After a
-game patch the `GAME_VERSION` must match what `Logs\Multiplayer.log` prints on the players' PCs, or
-they are rejected with a clear reason.
+The same lines also land in `/opt/cs2-multiplayer/Multiplayer.Server.log`.
+
+All settings are in `/opt/cs2-multiplayer/server.json`. Edit and save; the server re-reads it within ten
+seconds and says in the log what changed. Keys: `name`, `port`, `password`, `ownerKey`, `gameVersion`,
+`maxPlayers`, `modCheck` (`names` = same mods as the host at any version; `strict` = same versions too;
+`off` = no check), `playsetId` (a **public Paradox playset to follow**: its published mod list becomes the
+required list, re-read every 5 minutes, and connected players are told what was added or removed when a
+new version appears), `playsetHint` (extra text for rejected players), `requiredMods` (a fixed list of mod
+ids as strings when no playset is followed; empty = take the list from the host), `welcome` (chat line
+sent to everyone who joins) and `updateCheck`. Port, owner key, game version and the data folder only
+change on `sudo systemctl restart cs2-multiplayer`. Environment variables (`CS2MP_PASSWORD` and friends)
+and command-line options still override the file if you use them. After a game patch, `gameVersion`
+must match what `Logs\Multiplayer.log` prints on the players' PCs, or they are rejected with a clear
+reason.
 
 ## Joining
 

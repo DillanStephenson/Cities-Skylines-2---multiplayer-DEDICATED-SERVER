@@ -49,7 +49,24 @@ unzip cs2-multiplayer-server-linux-x64-*.zip -d /tmp/cs2mp
 sudo bash /tmp/cs2mp/setup-vps.sh "<password>" "<owner-key>" "<server name>"
 ```
 
-That installs it as a systemd service on port 27015. Settings live in `/etc/cs2-multiplayer/env`: port, password, owner key, game version, mod check mode, playset id. Details in [deploy/vps/README.md](deploy/vps/README.md).
+That installs it as a systemd service on port 27015. Every setting is in `/opt/cs2-multiplayer/server.json` (on Windows: `server.json` next to the program, see `server.example.json` in the zip). Edit it and save; the server picks the change up within ten seconds. Only port, owner key, game version and the data folder need a restart.
+
+```json
+{
+  "name": "Our server",
+  "port": 27015,
+  "password": "secret",
+  "ownerKey": "only-the-host-knows-this",
+  "gameVersion": "1.6.2f1",
+  "maxPlayers": 8,
+  "modCheck": "names",
+  "playsetId": 11843013,
+  "requiredMods": [],
+  "welcome": "Welcome! Save often."
+}
+```
+
+`modCheck` is `names` (same mods as the host, any version), `strict` or `off`. `playsetId` makes the server follow a public Paradox playset; leave it 0 and fill `requiredMods` with mod ids (`"125342"`) for a fixed list, or leave both empty to take the list from the host when they join. Details in [deploy/vps/README.md](deploy/vps/README.md).
 
 Whoever joins with the owner key is the host. The server checks GitHub for newer releases and says so in the console and to the host when it is behind.
 
@@ -57,7 +74,7 @@ Whoever joins with the owner key is the host. The server checks GitHub for newer
 
 - Everyone needs the same mods. Version numbers may differ.
 - Someone who is rejected is told what is missing and which playset to activate.
-- Give a dedicated server your public playset id (`CS2MP_PLAYSET_ID`) and it follows it: publish a new version of the playset, and within five minutes the server tells the players what changed. When your own game differs from the published playset, the server tells you to publish.
+- Put your public playset id in the server's `server.json` (`playsetId`) and it follows it: publish a new version of the playset, and within five minutes the server tells the players what changed. When your own game differs from the published playset, the server tells you to publish.
 
 ## Building it yourself
 
