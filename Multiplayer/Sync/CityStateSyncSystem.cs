@@ -159,10 +159,16 @@ namespace Multiplayer.Sync
 
                     // Progress drifts the same way: each PC earns its own XP. The leader's XP and development
                     // points are the shared ones; milestones then fire on every PC at the same XP.
-                    if (TryReadXp(out int xp))
+                    if (TryReadXp(out XP xp))
                     {
-                        command.Entries.Add(new StateEntry("xp", xp));
+                        command.Entries.Add(new StateEntry("xp", xp.m_XP));
                         command.Entries.Add(new StateEntry("devpoints", m_DevTreeSystem.points));
+                        // The one-off rewards the game has already paid (electricity grid built) and the
+                        // population and income high-water marks travel too, so the others do not earn
+                        // the same bonus again; they only ever move up on the receiving side.
+                        command.Entries.Add(new StateEntry("xprecord", (int)xp.m_XPRewardRecord));
+                        command.Entries.Add(new StateEntry("xpmaxpop", xp.m_MaximumPopulation));
+                        command.Entries.Add(new StateEntry("xpmaxinc", xp.m_MaximumIncome));
                     }
                 }
             }
@@ -313,6 +319,15 @@ namespace Multiplayer.Sync
 
                 case "xp":
                     return ApplyXp((int)Math.Round(value));
+
+                case "xprecord":
+                    return ApplyXpRecord((int)Math.Round(value));
+
+                case "xpmaxpop":
+                    return ApplyXpMaximum((int)Math.Round(value), false);
+
+                case "xpmaxinc":
+                    return ApplyXpMaximum((int)Math.Round(value), true);
 
                 case "devpoints":
                     return ApplyDevPoints((int)Math.Round(value));
@@ -513,19 +528,24 @@ namespace Multiplayer.Sync
 
         // ------------------------------------------------------------------ progression
 
-        private bool TryReadXp(out int xp)
+        private bool TryReadXp(out XP xp)
         {
-            xp = 0;
+            xp = default;
             Entity city = m_CitySystem.City;
             if (city == Entity.Null || !EntityManager.HasComponent<XP>(city))
             {
                 return false;
             }
 
-            xp = EntityManager.GetComponentData<XP>(city).m_XP;
+            xp = EntityManager.GetComponentData<XP>(city);
             return true;
         }
 
+        /// <summary>
+        /// Only the XP number moves. The rest of the component (the reward record, the population and
+        /// income high-water marks) stays as it is: writing a fresh XP struct wiped those, and the game
+        /// then paid "Electricity network online" and the population bonus again every few seconds.
+        /// </summary>
         private bool ApplyXp(int xp)
         {
             Entity city = m_CitySystem.City;
@@ -534,12 +554,62 @@ namespace Multiplayer.Sync
                 return false;
             }
 
-            if (EntityManager.GetComponentData<XP>(city).m_XP == xp)
+            XP current = EntityManager.GetComponentData<XP>(city);
+            if (current.m_XP == xp)
             {
                 return false;
             }
 
-            EntityManager.SetComponentData(city, new XP { m_XP = xp });
+            current.m_XP = xp;
+            EntityManager.SetComponentData(city, current);
+            return true;
+        }
+
+        private bool ApplyXpRecord(int flags)
+        {
+            Entity city = m_CitySystem.City;
+            if (city == Entity.Null || !EntityManager.HasComponent<XP>(city))
+            {
+                return false;
+            }
+
+            XP current = EntityManager.GetComponentData<XP>(city);
+            XPRewardFlags merged = current.m_XPRewardRecord | (XPRewardFlags)(byte)flags;
+            if (merged == current.m_XPRewardRecord)
+            {
+                return false;
+            }
+
+            current.m_XPRewardRecord = merged;
+            EntityManager.SetComponentData(city, current);
+            return true;
+        }
+
+        private bool ApplyXpMaximum(int value, bool income)
+        {
+            Entity city = m_CitySystem.City;
+            if (city == Entity.Null || !EntityManager.HasComponent<XP>(city))
+            {
+                return false;
+            }
+
+            XP current = EntityManager.GetComponentData<XP>(city);
+            int mine = income ? current.m_MaximumIncome : current.m_MaximumPopulation;
+            if (value <= mine)
+            {
+                return false;
+            }
+
+            if (income)
+            {
+                current.m_MaximumIncome = value;
+            }
+            else
+            {
+                current.m_MaximumPopulation = value;
+            }
+
+            EntityManager.SetComponentData(city, current);
             return true;
         }
 

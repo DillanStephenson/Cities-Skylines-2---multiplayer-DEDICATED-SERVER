@@ -35,6 +35,13 @@ namespace Multiplayer.Sync
 
         private static readonly MethodInfo ApplyModeSetter = typeof(ToolBaseSystem).GetProperty("applyMode", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetSetMethod(true);
 
+        /// <summary>
+        /// The tool system's private active-tool slot. Writing it directly swaps the running tool the same way
+        /// the property does (ToolUpdate compares the slot every frame) without raising EventToolChanged, so the
+        /// UI never hears about the borrow: the tool options panel and the toolbar selection stay put.
+        /// </summary>
+        private static readonly FieldInfo ActiveToolField = typeof(ToolSystem).GetField("m_ActiveTool", BindingFlags.Instance | BindingFlags.NonPublic);
+
         // A List used as a FIFO: Queue<T> is ambiguous between the game's mscorlib and System.dll on net48.
         private readonly List<QueuedBuild> m_Queue = new List<QueuedBuild>();
 
@@ -320,7 +327,7 @@ namespace Multiplayer.Sync
 
             m_SavedTool = active;
             m_SavedPrefab = m_ToolSystem.activePrefab;
-            m_ToolSystem.activeTool = m_DefaultTool;
+            SetActiveToolQuietly(m_DefaultTool);
             m_WaitedFrames = 0;
             return false;
         }
@@ -334,7 +341,18 @@ namespace Multiplayer.Sync
 
             try
             {
-                if (m_SavedPrefab != null)
+                if (m_ToolSystem.activeTool != m_DefaultTool)
+                {
+                    // The player picked something else while we had the selection tool; that choice went
+                    // through the property and the UI already knows about it. Leave it.
+                }
+                else if (m_SavedTool.GetPrefab() == m_SavedPrefab)
+                {
+                    // The tool still holds its prefab: put it back the quiet way, so the UI, which never saw it
+                    // go, has nothing to redraw.
+                    SetActiveToolQuietly(m_SavedTool);
+                }
+                else if (m_SavedPrefab != null)
                 {
                     m_ToolSystem.ActivatePrefabTool(m_SavedPrefab);
                 }
@@ -509,6 +527,32 @@ namespace Multiplayer.Sync
         }
 
         public bool IsBorrowingTool => m_SavedTool != null;
+
+        /// <summary>
+        /// Makes <paramref name="tool"/> the running tool without the tool-changed event. ToolUpdate still
+        /// stops the old tool and starts the new one on its next pass, exactly as after the property, and the
+        /// full-update flag is raised as the property would. Falls back to the property when the slot cannot
+        /// be reached.
+        /// </summary>
+        private void SetActiveToolQuietly(ToolBaseSystem tool)
+        {
+            if (ActiveToolField == null || m_ToolSystem.activeTool == tool)
+            {
+                m_ToolSystem.activeTool = tool;
+                return;
+            }
+
+            try
+            {
+                ActiveToolField.SetValue(m_ToolSystem, tool);
+                m_ToolSystem.RequireFullUpdate();
+            }
+            catch (Exception ex)
+            {
+                Mod.log.Warn("Quiet tool switch failed (" + ex.Message + "); switching the loud way");
+                m_ToolSystem.activeTool = tool;
+            }
+        }
 
         private void SetApplyMode(ApplyMode mode)
         {
