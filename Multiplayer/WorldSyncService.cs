@@ -37,6 +37,45 @@ namespace Multiplayer
 
         /// <summary>When the local player last placed or removed something (service clock); 0 when never.</summary>
         public long LastLocalBuildMs { get; set; }
+
+        /// <summary>
+        /// Set when this game found it can no longer follow the others' builds (several could not be recreated
+        /// here): the next save from the source of truth is loaded as soon as it arrives, whatever the settings.
+        /// The source of truth is the leader (the host, else the longest-connected player), who never resyncs.
+        /// </summary>
+        public bool ResyncPending { get; private set; }
+
+        private long _lastAskedUploadMs = -1;
+        private const long AskedUploadMinGapMs = 30000;
+
+        public void RequestResync()
+        {
+            if (_session.IsLeader || ResyncPending)
+            {
+                return;
+            }
+
+            ResyncPending = true;
+            RefreshStatus();
+        }
+
+        /// <summary>The leader was asked for a fresh save by someone who fell out of step: upload now, at most every 30 s.</summary>
+        public void UploadIfAsked(long nowMs)
+        {
+            GameManager manager = GameManager.instance;
+            if (!_session.IsLeader || _busy || manager == null || manager.gameMode != GameMode.Game || manager.isGameLoading)
+            {
+                return;
+            }
+
+            if (_lastAskedUploadMs >= 0 && nowMs - _lastAskedUploadMs < AskedUploadMinGapMs)
+            {
+                return;
+            }
+
+            _lastAskedUploadMs = nowMs;
+            StartUpload(nowMs, "a player fell out of step and asked for a fresh save");
+        }
         private const int NewCityMaxTries = 5;
 
         private long _newCityInGameSinceMs = -1;
@@ -210,6 +249,7 @@ namespace Multiplayer
                 bool recentlyBuilt = LastLocalBuildMs > 0 && nowMs - LastLocalBuildMs < RecentBuildMs;
                 bool automatic = inMenu
                     || (inGame && _loadedRevision == 0 && !_session.IsLeader)
+                    || (inGame && _loadedRevision != 0 && ResyncPending)
                     || (inGame && _loadedRevision != 0 && _settings.FollowSaves && !recentlyBuilt);
                 if (automatic)
                 {
@@ -491,6 +531,7 @@ namespace Multiplayer
             {
                 _loadedRevision = _awaitingLoadRevision;
                 _lastUploadMs = NowMs();
+                ResyncPending = false;
                 _note("Now playing the shared city, revision " + _loadedRevision);
             }
             else
@@ -577,6 +618,8 @@ namespace Multiplayer
 
                 HostChoicePending = false;
                 _hostChoiceAsked = false;
+                ResyncPending = false;
+                _lastAskedUploadMs = -1;
 
                 Idle();
             }
@@ -611,6 +654,10 @@ namespace Multiplayer
             else if (HostChoicePending)
             {
                 builder.Append("The server holds ").Append(_session.ServerWorld).Append(": load it, or start a new world?");
+            }
+            else if (ResyncPending)
+            {
+                builder.Append("Out of step with the shared city; the next save from the host loads on its own");
             }
             else if (NewCityPending)
             {

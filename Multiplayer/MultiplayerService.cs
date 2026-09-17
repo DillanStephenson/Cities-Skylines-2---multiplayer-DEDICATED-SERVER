@@ -168,6 +168,32 @@ namespace Multiplayer
             _log.Info("Sent mod data: " + command + " (" + bytes.Length + " bytes, " + command.Entities.Count + " entity refs)");
         }
 
+        private readonly List<long> _replayFailures = new List<long>();
+        private const int ResyncAfterFailures = 3;
+        private const long ResyncWindowMs = 120000;
+        public const string SaveNowKind = "savenow";
+
+        /// <summary>
+        /// Called by the replay system when another player's build could not be recreated here. Three such
+        /// failures within two minutes mean this city has drifted from the source of truth: the leader is asked
+        /// for a fresh save and it loads on its own when it arrives. The leader itself never resyncs.
+        /// </summary>
+        public void NoteReplayFailure()
+        {
+            long now = Now;
+            _replayFailures.Add(now);
+            _replayFailures.RemoveAll(t => now - t > ResyncWindowMs);
+            if (IsLeader || WorldSync.ResyncPending || _replayFailures.Count < ResyncAfterFailures || Session.State != SessionState.Connected)
+            {
+                return;
+            }
+
+            _replayFailures.Clear();
+            WorldSync.RequestResync();
+            Session.SendGameplayCommand(SaveNowKind, new byte[0]);
+            Note("Out of step with the host's city (" + ResyncAfterFailures + " builds could not be recreated here); the next save from the host loads on its own");
+        }
+
         /// <summary>Called by the road config sync with a Road Builder road the others need before they can replay it.</summary>
         public void SendModConfig(ModConfigCommand command)
         {
@@ -213,6 +239,17 @@ namespace Multiplayer
 
         private void OnGameplayCommand(GameplayCommandMessage message)
         {
+            if (message.Kind == SaveNowKind)
+            {
+                if (IsLeader)
+                {
+                    _log.Info(PlayerName(message.OriginPlayerId) + " fell out of step and asked for a fresh save");
+                    WorldSync.UploadIfAsked(Now);
+                }
+
+                return;
+            }
+
             if (message.Kind == PreviewCommand.Kind)
             {
                 try
