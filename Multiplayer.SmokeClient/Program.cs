@@ -105,6 +105,40 @@ namespace Multiplayer.SmokeClient
                     return;
                 }
 
+                if (command.Kind == Multiplayer.Core.Build.LaneConnectionsCommand.Kind)
+                {
+                    try
+                    {
+                        var lanes = Multiplayer.Core.Build.LaneConnectionsCommand.FromBytes(command.Payload);
+                        Console.WriteLine("  " + lanes);
+                        if (!float.IsNaN(modDataOffset))
+                        {
+                            lanes.Node.Position.X += modDataOffset;
+                            foreach (var group in lanes.Groups)
+                            {
+                                group.Edge.Position.X += modDataOffset;
+                                group.Edge.Aux.X += modDataOffset;
+                                foreach (var link in group.Connections)
+                                {
+                                    link.Source.Position.X += modDataOffset;
+                                    link.Source.Aux.X += modDataOffset;
+                                    link.Target.Position.X += modDataOffset;
+                                    link.Target.Aux.X += modDataOffset;
+                                }
+                            }
+
+                            pendingEchoes.Enqueue((clockForEcho.ElapsedMilliseconds + 1500, lanes.ToBytes(), Multiplayer.Core.Build.LaneConnectionsCommand.Kind));
+                            Console.WriteLine("  will echo it back shifted by " + modDataOffset + " m on X in 1.5 s");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("  could not decode lane connections: " + ex.Message);
+                    }
+
+                    return;
+                }
+
                 if (command.Kind == Multiplayer.Core.Build.BuildResultCommand.Kind)
                 {
                     try

@@ -29,6 +29,19 @@ namespace Multiplayer.Sync
 
         /// <summary>float3 field that tells such standalone entities apart; null when there is only ever one.</summary>
         public string PositionField;
+
+        /// <summary>An empty marker component: only its presence is mirrored.</summary>
+        public bool IsTag;
+
+        /// <summary>Extra runtime fields of this type (normalised names: lower case, no m_), on top of the common list.</summary>
+        public string[] RuntimeFields;
+    }
+
+    /// <summary>Where a named field sits inside a mirrored struct.</summary>
+    internal struct FieldSpan
+    {
+        public int Offset;
+        public int Size;
     }
 
     /// <summary>
@@ -44,9 +57,9 @@ namespace Multiplayer.Sync
             "gotimestamp", "cached", "history",
         };
 
-        private static readonly string[] RuntimeExact = { "targetduration", "priority" };
+        private static readonly string[] RuntimeExact = new string[0];
 
-        private struct Field
+        private struct Slot
         {
             public int Offset;
             public int Size;
@@ -62,11 +75,34 @@ namespace Multiplayer.Sync
         public readonly List<int> RangeOffsets = new List<int>();
         public readonly List<int> RangeSizes = new List<int>();
         public readonly List<int> EntityOffsets = new List<int>();
+        public readonly Dictionary<string, FieldSpan> Fields = new Dictionary<string, FieldSpan>();
+
+        /// <summary>A layout for an empty marker component: nothing to read or compare.</summary>
+        public static StructLayoutInfo Tag()
+        {
+            return new StructLayoutInfo { Size = 0 };
+        }
+
+        public FieldSpan Field(string name)
+        {
+            FieldSpan span;
+            if (!Fields.TryGetValue(name, out span))
+            {
+                throw new InvalidOperationException("no field '" + name + "' in the mirrored struct");
+            }
+
+            return span;
+        }
 
         public static StructLayoutInfo Build(Type type, TrackedType spec)
         {
+            if (spec != null && spec.IsTag)
+            {
+                return Tag();
+            }
+
             var info = new StructLayoutInfo { Size = UnsafeUtility.SizeOf(type) };
-            var fields = new List<Field>();
+            var fields = new List<Slot>();
             foreach (FieldInfo field in type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
             {
                 if (field.IsStatic)
@@ -75,11 +111,11 @@ namespace Multiplayer.Sync
                 }
 
                 string name = Normalise(field.Name);
-                fields.Add(new Field
+                fields.Add(new Slot
                 {
                     Offset = UnsafeUtility.GetFieldOffset(field),
                     Size = SizeOf(field.FieldType),
-                    Runtime = IsRuntime(name),
+                    Runtime = IsRuntime(name) || (spec != null && spec.RuntimeFields != null && Array.IndexOf(spec.RuntimeFields, name) >= 0),
                     IsEntity = field.FieldType == typeof(Entity),
                     RawName = field.Name,
                 });
@@ -88,14 +124,15 @@ namespace Multiplayer.Sync
             fields.Sort((a, b) => a.Offset.CompareTo(b.Offset));
             for (int i = 0; i < fields.Count; i++)
             {
-                Field field = fields[i];
+                Slot field = fields[i];
                 if (field.Size <= 0)
                 {
                     field.Size = (i + 1 < fields.Count ? fields[i + 1].Offset : info.Size) - field.Offset;
                 }
 
                 info.FieldCount++;
-                if (spec.PositionField != null && field.RawName == spec.PositionField)
+                info.Fields[field.RawName] = new FieldSpan { Offset = field.Offset, Size = field.Size };
+                if (spec != null && spec.PositionField != null && field.RawName == spec.PositionField)
                 {
                     info.PositionOffset = field.Offset;
                 }
@@ -386,6 +423,76 @@ namespace Multiplayer.Sync
         }
     }
 
+    /// <summary>An empty marker component: mirrored as present or absent, never read (zero-sized components cannot be).</summary>
+    internal sealed class TagMirror<T> : Mirror where T : unmanaged, IComponentData
+    {
+        private static readonly byte[] Nothing = new byte[0];
+        private readonly EntityManager m_Entities;
+
+        public TagMirror(EntityManager entities, TrackedType spec, StructLayoutInfo layout)
+        {
+            m_Entities = entities;
+            Spec = spec;
+            Layout = layout;
+            Query = MakeQuery(entities, ComponentType.ReadOnly<T>());
+        }
+
+        public override bool Has(Entity entity)
+        {
+            return m_Entities.HasComponent<T>(entity);
+        }
+
+        public override byte[] Read(Entity entity)
+        {
+            return Nothing;
+        }
+
+        public override void Write(Entity entity, byte[] data)
+        {
+            if (!m_Entities.HasComponent<T>(entity))
+            {
+                m_Entities.AddComponent<T>(entity);
+            }
+        }
+
+        public override void Remove(Entity entity)
+        {
+            m_Entities.RemoveComponent<T>(entity);
+        }
+    }
+
+    /// <summary>Builds the right mirror for a type found at runtime.</summary>
+    internal static class MirrorFactory
+    {
+        public static Type FindType(string fullName)
+        {
+            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try
+                {
+                    Type type = assembly.GetType(fullName, false);
+                    if (type != null)
+                    {
+                        return type;
+                    }
+                }
+                catch (Exception)
+                {
+                    // Dynamic or broken assembly; not ours.
+                }
+            }
+
+            return null;
+        }
+
+        public static Mirror Create(EntityManager entities, TrackedType spec, Type type)
+        {
+            StructLayoutInfo layout = StructLayoutInfo.Build(type, spec);
+            Type open = spec.IsTag ? typeof(TagMirror<>) : spec.IsBuffer ? typeof(BufferMirror<>) : typeof(ComponentMirror<>);
+            return (Mirror)Activator.CreateInstance(open.MakeGenericType(type), entities, spec, layout);
+        }
+    }
+
     internal sealed class BufferMirror<T> : Mirror where T : unmanaged, IBufferElementData
     {
         private readonly EntityManager m_Entities;
@@ -457,7 +564,7 @@ namespace Multiplayer.Sync
         {
             // Traffic Tool Essentials: junction signals, phases, per-approach and per-lane groups, labels, sync groups, depot zones.
             new TrackedType { TypeName = "C2VM.TrafficToolEssentials.Components.CustomTrafficLights" },
-            new TrackedType { TypeName = "C2VM.TrafficToolEssentials.Components.CustomPhaseData", IsBuffer = true },
+            new TrackedType { TypeName = "C2VM.TrafficToolEssentials.Components.CustomPhaseData", IsBuffer = true, RuntimeFields = new[] { "priority", "targetduration" } },
             new TrackedType { TypeName = "C2VM.TrafficToolEssentials.Components.EdgeGroupMask", IsBuffer = true },
             new TrackedType { TypeName = "C2VM.TrafficToolEssentials.Components.SubLaneGroupMask", IsBuffer = true },
             new TrackedType { TypeName = "C2VM.TrafficToolEssentials.Components.ExtraLaneSignal" },
@@ -470,6 +577,10 @@ namespace Multiplayer.Sync
             new TrackedType { TypeName = "C2VM.TrafficToolEssentials.Components.LineDepotZoneAssignment", MarkUpdated = false },
             // Shared lane library (Traffic Tool Essentials / Traffic Lights Enhancement): lane direction restrictions.
             new TrackedType { TypeName = "C2VM.CommonLibraries.LaneSystem.CustomLaneDirection", IsBuffer = true },
+            // Traffic (TM:PE successor): priority signs live on the road edge as a small buffer plus a marker.
+            // Its lane connections need hidden data entities and go through TrafficLaneSyncSystem instead.
+            new TrackedType { TypeName = "Traffic.Components.ModifiedPriorities", IsTag = true },
+            new TrackedType { TypeName = "Traffic.Components.PrioritySigns.LanePriority", IsBuffer = true },
         };
 
         private readonly List<ModDataCommand> m_Incoming = new List<ModDataCommand>();
@@ -566,7 +677,7 @@ namespace Multiplayer.Sync
             for (int i = m_Unbound.Count - 1; i >= 0; i--)
             {
                 TrackedType spec = m_Unbound[i];
-                Type type = FindType(spec.TypeName);
+                Type type = MirrorFactory.FindType(spec.TypeName);
                 if (type == null)
                 {
                     continue;
@@ -575,11 +686,10 @@ namespace Multiplayer.Sync
                 m_Unbound.RemoveAt(i);
                 try
                 {
-                    StructLayoutInfo layout = StructLayoutInfo.Build(type, spec);
-                    Type mirrorType = (spec.IsBuffer ? typeof(BufferMirror<>) : typeof(ComponentMirror<>)).MakeGenericType(type);
-                    var mirror = (Mirror)Activator.CreateInstance(mirrorType, EntityManager, spec, layout);
+                    Mirror mirror = MirrorFactory.Create(EntityManager, spec, type);
                     m_Mirrors.Add(mirror);
-                    Mod.log.Info("Mod data sync: tracking " + spec.TypeName + " (" + layout.Size + " bytes, " + layout.FieldCount + " fields, " + layout.RuntimeCount + " runtime, " + layout.EntityOffsets.Count + " entity refs)");
+                    StructLayoutInfo layout = mirror.Layout;
+                    Mod.log.Info("Mod data sync: tracking " + spec.TypeName + (spec.IsTag ? " (marker)" : " (" + layout.Size + " bytes, " + layout.FieldCount + " fields, " + layout.RuntimeCount + " runtime, " + layout.EntityOffsets.Count + " entity refs)"));
                 }
                 catch (Exception ex)
                 {
@@ -599,27 +709,6 @@ namespace Multiplayer.Sync
 
                 Mod.log.Info("Mod data sync: not present in this game (mod not loaded), skipped: " + string.Join(", ", names.ToArray()));
             }
-        }
-
-        private static Type FindType(string fullName)
-        {
-            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                try
-                {
-                    Type type = assembly.GetType(fullName, false);
-                    if (type != null)
-                    {
-                        return type;
-                    }
-                }
-                catch (Exception)
-                {
-                    // Dynamic or broken assembly; not ours.
-                }
-            }
-
-            return null;
         }
 
         private Mirror FindMirror(string typeName)

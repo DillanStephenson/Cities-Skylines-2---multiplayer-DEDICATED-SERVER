@@ -160,6 +160,15 @@ namespace Multiplayer
             _log.Info("Sent mod data: " + command + " (" + bytes.Length + " bytes, " + command.Entities.Count + " entity refs)");
         }
 
+        /// <summary>Called by the lane connection sync with a junction's Traffic lane connections the local player changed.</summary>
+        public void SendLaneConnections(LaneConnectionsCommand command)
+        {
+            byte[] bytes = command.ToBytes();
+            Session.SendGameplayCommand(LaneConnectionsCommand.Kind, bytes);
+            _modDataSent++;
+            _log.Info("Sent " + command + " (" + bytes.Length + " bytes)");
+        }
+
         /// <summary>Called by the replay system once someone else's build has been applied here, or could not be.</summary>
         public void SendBuildResult(BuildResultCommand result)
         {
@@ -200,6 +209,29 @@ namespace Multiplayer
                 catch (Exception ex)
                 {
                     _log.Warn("Bad mod data from player " + message.OriginPlayerId + ": " + ex.Message);
+                }
+
+                return;
+            }
+
+            if (message.Kind == LaneConnectionsCommand.Kind)
+            {
+                try
+                {
+                    LaneConnectionsCommand lanes = LaneConnectionsCommand.FromBytes(message.Payload);
+                    _modDataReceived++;
+                    World world = World.DefaultGameObjectInjectionWorld;
+                    Sync.TrafficLaneSyncSystem system = world != null ? world.GetExistingSystemManaged<Sync.TrafficLaneSyncSystem>() : null;
+                    if (system != null)
+                    {
+                        system.Receive(lanes);
+                    }
+
+                    _log.Info("Received " + lanes + " from " + PlayerName(message.OriginPlayerId));
+                }
+                catch (Exception ex)
+                {
+                    _log.Warn("Bad lane connections from player " + message.OriginPlayerId + ": " + ex.Message);
                 }
 
                 return;

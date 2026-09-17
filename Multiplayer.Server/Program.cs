@@ -163,6 +163,10 @@ namespace Multiplayer.Server
                     {
                         detail = "mod data " + Multiplayer.Core.Build.ModDataCommand.FromBytes(c.Payload) + " from player " + c.OriginPlayerId;
                     }
+                    else if (c.Kind == Multiplayer.Core.Build.LaneConnectionsCommand.Kind)
+                    {
+                        detail = Multiplayer.Core.Build.LaneConnectionsCommand.FromBytes(c.Payload) + " from player " + c.OriginPlayerId;
+                    }
                     else if (c.Kind == Multiplayer.Core.Build.BuildResultCommand.Kind)
                     {
                         detail = "result " + Multiplayer.Core.Build.BuildResultCommand.FromBytes(c.Payload) + " from player " + c.OriginPlayerId;

@@ -56,6 +56,7 @@ namespace Multiplayer
 
             // Other mods' per-entity settings (Traffic Tool Essentials junctions, for one): same phase their panels write in.
             updateSystem.UpdateAt<Sync.ModDataSyncSystem>(SystemUpdatePhase.UIUpdate);
+            updateSystem.UpdateAt<Sync.TrafficLaneSyncSystem>(SystemUpdatePhase.UIUpdate);
 
             // Main-menu entry and Join / Host screens (Multiplayer.mjs next to this DLL talks to these bindings).
             updateSystem.UpdateAt<MultiplayerUISystem>(SystemUpdatePhase.UIUpdate);
