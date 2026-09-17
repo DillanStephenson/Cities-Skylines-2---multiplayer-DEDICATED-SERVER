@@ -25,12 +25,13 @@ export const MultiplayerScreen = (props: any) => {
   const requested = useValue(b.requestedView$);
   const [view, setView] = useState<View>(requested === "join" || requested === "host" ? requested : "choice");
   const online = useValue(b.online$);
+  const hostChoice = useValue(b.hostChoice$);
 
   // Tell the C# side when the player leaves the screen (back button, or the game loading a city), so the
   // credits screen goes back to being the credits screen.
   useEffect(() => () => b.screenExited(), []);
 
-  const title = view === "choice" ? "Multiplayer" : view === "join" ? "Join a server" : "Host a session";
+  const title = hostChoice ? "Load the last save, or start a new world?" : view === "choice" ? "Multiplayer" : view === "join" ? "Join a server" : "Host a session";
   const back = view === "choice" ? props.onClose : () => setView("choice");
 
   // One navigation scope around everything: the sub-screen's focus node hosts a single child, and this
@@ -38,14 +39,15 @@ export const MultiplayerScreen = (props: any) => {
   const body = (
     <AutoNavigationScope debugName="Multiplayer screen" direction={NavigationDirection.Both} allowLooping>
     <div className={styles.page}>
-      {view === "choice" && (
+      {hostChoice && <HostChoice />}
+      {!hostChoice && view === "choice" && (
         <div className={styles.cards}>
           <Card icon="Media/Glyphs/Passenger.svg" label="Join game" hint="Connect to a friend's server window or a dedicated server by address" onSelect={() => setView("join")} />
           <Card icon="Media/Glyphs/Residence.svg" label="Host game" hint="Open the server window on this PC and play in it as the owner" onSelect={() => setView("host")} />
         </div>
       )}
-      {view === "join" && <JoinForm />}
-      {view === "host" && <HostForm />}
+      {!hostChoice && view === "join" && <JoinForm />}
+      {!hostChoice && view === "host" && <HostForm />}
       {(view !== "choice" || online) && <StatusPanel />}
     </div>
     </AutoNavigationScope>
@@ -73,6 +75,27 @@ export const MultiplayerScreen = (props: any) => {
 };
 
 // ------------------------------------------------------------------ pieces
+
+/** Asked of the host right after connecting from the menu, when the server already holds a city. */
+const HostChoice = () => {
+  const world = useValue(b.world$);
+  return (
+    <div className={styles.panel}>
+      <div className={styles.note}>{"The server holds " + world + "."}</div>
+      <div className={styles.note}>
+        {"Load last save carries on with that city. New world opens the map list, mod maps included; pick one, set the options you want (unlock all map tiles, and so on), and the city you start replaces the one on the server as soon as it has loaded."}
+      </div>
+      <div className={styles.actions}>
+        <Button variant="primary" className={styles.button} onSelect={b.chooseLoad}>
+          Load last save
+        </Button>
+        <Button variant="flat" className={styles.button} onSelect={b.chooseNewWorld}>
+          New world
+        </Button>
+      </div>
+    </div>
+  );
+};
 
 const Card = ({ icon, label, hint, onSelect }: { icon: string; label: string; hint: string; onSelect: () => void }) => (
   <Button variant="flat" className={styles.card} onSelect={onSelect}>

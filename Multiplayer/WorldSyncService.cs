@@ -67,6 +67,29 @@ namespace Multiplayer
         /// </summary>
         public bool NewCityPending { get; set; }
 
+        /// <summary>
+        /// Set while the host, connected from the main menu to a server that already holds a city, has not said
+        /// whether to load that city or start a new world. Nothing is downloaded until they answer.
+        /// </summary>
+        public bool HostChoicePending { get; private set; }
+
+        private bool _hostChoiceAsked;
+
+        /// <summary>The host answered "load the server's city": the normal download follows on the next update.</summary>
+        public void ChooseLoad()
+        {
+            HostChoicePending = false;
+            RefreshStatus();
+        }
+
+        /// <summary>The host answered "start a new world": the next city they start or load replaces the server's.</summary>
+        public void ChooseNewWorld()
+        {
+            HostChoicePending = false;
+            NewCityPending = true;
+            RefreshStatus();
+        }
+
         public WorldSyncService(ClientSession session, Setting settings, ILog log, Action<string> note)
         {
             _session = session ?? throw new ArgumentNullException(nameof(session));
@@ -156,6 +179,26 @@ namespace Multiplayer
 
             if (serverWorld != null && serverWorld.Revision != _loadedRevision)
             {
+                // The host is asked first: load what the server holds, or start a new world. Everyone else just loads it.
+                if (inMenu && _session.IsOwner && _loadedRevision == 0 && !_hostChoiceAsked)
+                {
+                    _hostChoiceAsked = true;
+                    HostChoicePending = true;
+                    RefreshStatus();
+                    return;
+                }
+
+                if (HostChoicePending)
+                {
+                    if (!inGame)
+                    {
+                        return;
+                    }
+
+                    // They went into a city of their own instead of answering; the question is moot.
+                    HostChoicePending = false;
+                }
+
                 // From the menu: always. In a city: when this game has not loaded the shared city yet (unless it
                 // is the one expected to upload its own), or when the player asked to follow other people's saves.
                 bool automatic = inMenu
@@ -225,6 +268,9 @@ namespace Multiplayer
                 return;
             }
 
+            // Fetching the server's city on purpose ends any "new city" or "load or new?" state: what loads is the shared city.
+            NewCityPending = false;
+            HostChoicePending = false;
             StartDownload(nowMs);
         }
 
@@ -522,6 +568,9 @@ namespace Multiplayer
                     NewCityPending = false;
                 }
 
+                HostChoicePending = false;
+                _hostChoiceAsked = false;
+
                 Idle();
             }
         }
@@ -551,6 +600,10 @@ namespace Multiplayer
                 {
                     builder.Append(' ').Append(100 * _downloadReceived / _downloadTotal).Append('%');
                 }
+            }
+            else if (HostChoicePending)
+            {
+                builder.Append("The server holds ").Append(_session.ServerWorld).Append(": load it, or start a new world?");
             }
             else if (NewCityPending)
             {

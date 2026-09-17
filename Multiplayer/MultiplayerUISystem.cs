@@ -38,6 +38,7 @@ namespace Multiplayer
         private ValueBinding<string> m_LastError;
         private ValueBinding<string> m_Recent;
         private ValueBinding<bool> m_NewerCity;
+        private ValueBinding<bool> m_HostChoice;
         private ValueBinding<string> m_RequestedView;
         private ValueBinding<bool> m_TransferBusy;
         private ValueBinding<string> m_Presence;
@@ -53,10 +54,10 @@ namespace Multiplayer
         /// Open a screen without a click: "choice", "join" or "host" open the menu screen on that view once
         /// the main menu is up; "panel" opens the in-game panel. Used by the dev trigger for screenshots.
         /// </summary>
-        public void RequestView(string view)
+        public void RequestView(string view, bool immediate = false)
         {
             m_PendingView = (view ?? string.Empty).Trim().ToLowerInvariant();
-            m_PendingFrames = 0;
+            m_PendingFrames = immediate ? OpenDelayFrames : 0;
         }
 
         protected override void OnCreate()
@@ -83,6 +84,7 @@ namespace Multiplayer
             AddBinding(m_LastError = new ValueBinding<string>(Group, "lastError", string.Empty));
             AddBinding(m_Recent = new ValueBinding<string>(Group, "recent", string.Empty));
             AddBinding(m_NewerCity = new ValueBinding<bool>(Group, "newerCity", false));
+            AddBinding(m_HostChoice = new ValueBinding<bool>(Group, "hostChoice", false));
             AddBinding(m_RequestedView = new ValueBinding<string>(Group, "requestedView", string.Empty));
             AddBinding(m_TransferBusy = new ValueBinding<bool>(Group, "transferBusy", false));
             AddBinding(m_Presence = new ValueBinding<string>(Group, "presence", string.Empty));
@@ -97,6 +99,8 @@ namespace Multiplayer
             AddBinding(new TriggerBinding(Group, "host", () => Mod.Service?.HostGame()));
             AddBinding(new TriggerBinding(Group, "join", () => Mod.Service?.JoinGame()));
             AddBinding(new TriggerBinding(Group, "joinNewCity", () => Mod.Service?.JoinForNewCity()));
+            AddBinding(new TriggerBinding(Group, "chooseLoad", () => Mod.Service?.ChooseLoadServerCity()));
+            AddBinding(new TriggerBinding(Group, "chooseNewWorld", () => Mod.Service?.ChooseNewWorld()));
             AddBinding(new TriggerBinding(Group, "leave", () => Mod.Service?.Leave()));
             AddBinding(new TriggerBinding(Group, "uploadCity", () => Mod.Service?.UploadCityNow()));
             AddBinding(new TriggerBinding(Group, "fetchCity", () => Mod.Service?.FetchCityNow()));
@@ -165,6 +169,15 @@ namespace Multiplayer
             m_LastError.Update(session.State == SessionState.Failed ? session.LastError ?? string.Empty : string.Empty);
             m_Recent.Update(string.Join("\n", service.RecentLines));
             m_NewerCity.Update(session.ServerWorld != null && session.ServerWorld.Revision != service.WorldSync.LoadedRevision);
+
+            // The host is being asked "load the server's city or start a new world?": bring the screen up if it is closed.
+            bool hostChoice = service.WorldSync.HostChoicePending;
+            if (hostChoice && !m_HostChoice.value && !m_ScreenActive.value && manager != null && manager.gameMode == GameMode.MainMenu && string.IsNullOrEmpty(m_PendingView))
+            {
+                RequestView("join", immediate: true);
+            }
+
+            m_HostChoice.Update(hostChoice);
             m_TransferBusy.Update(service.WorldSync.IsBusy);
         }
 
@@ -262,6 +275,38 @@ namespace Multiplayer
 
             if (manager.gameMode != GameMode.MainMenu)
             {
+                return;
+            }
+
+            // Dev answers to the host's question: "load", or "newworld[:map part]" which also starts that map on its own.
+            if (m_PendingView == "load" || m_PendingView.StartsWith("newworld", StringComparison.Ordinal))
+            {
+                MultiplayerService service = Mod.Service;
+                if (service == null || !service.WorldSync.HostChoicePending)
+                {
+                    return;
+                }
+
+                if (++m_PendingFrames < OpenDelayFrames / 2)
+                {
+                    // Leave the question on screen for a few seconds first (screenshots).
+                    return;
+                }
+
+                if (m_PendingView == "load")
+                {
+                    service.ChooseLoadServerCity();
+                }
+                else
+                {
+                    int colon = m_PendingView.IndexOf(':');
+                    service.DevAutoStartNewCity = true;
+                    service.DevNewCityMap = colon >= 0 ? m_PendingView.Substring(colon + 1) : string.Empty;
+                    service.ChooseNewWorld();
+                }
+
+                Mod.log.Info("Dev answered the host's question with '" + m_PendingView + "'");
+                m_PendingView = null;
                 return;
             }
 

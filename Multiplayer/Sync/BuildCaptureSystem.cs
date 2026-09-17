@@ -81,7 +81,23 @@ namespace Multiplayer.Sync
                 return;
             }
 
+            string hold = ReplayRules.HoldReason(command);
+            if (hold != null)
+            {
+                // Held back here as well as on the receiving side, so an older game on the other end is safe too.
+                Mod.log.Info("Not sent: " + command + ": " + hold);
+                if (!m_ToldAboutHold)
+                {
+                    m_ToldAboutHold = true;
+                    service.Notice("Farms, forestry, mines and oil fields are not sent live yet; the others get them with the next save to the server");
+                }
+
+                return;
+            }
+
             service.SendBuild(command);
         }
+
+        private bool m_ToldAboutHold;
     }
 }

@@ -321,6 +321,14 @@ namespace Multiplayer
 
             _buildsReceived++;
             _log.Info("Received " + command + " from player " + message.OriginPlayerId + ": " + Summarize(command));
+            string hold = ReplayRules.HoldReason(command);
+            if (hold != null)
+            {
+                _log.Info("Not replaying " + command + ": " + hold);
+                SendBuildResult(new BuildResultCommand { Sequence = command.Sequence, BuilderPlayerId = message.OriginPlayerId, ToolId = command.ToolId, Ok = false, Message = hold });
+                return;
+            }
+
             Sync.BuildReplaySystem replay = Replay;
             if (replay == null)
             {
@@ -641,6 +649,31 @@ namespace Multiplayer
 
             WorldSync.NewCityPending = true;
             Connect(host, port, _settings.JoinPassword, _settings.JoinOwnerKey);
+        }
+
+        /// <summary>The host's answer to "load the server's city or start a new world?": load it.</summary>
+        public void ChooseLoadServerCity()
+        {
+            if (!WorldSync.HostChoicePending)
+            {
+                return;
+            }
+
+            WorldSync.ChooseLoad();
+            Note("Loading the server's city");
+        }
+
+        /// <summary>The host's answer: a new world. New Game opens; the city started there replaces the server's once loaded.</summary>
+        public void ChooseNewWorld()
+        {
+            if (!WorldSync.HostChoicePending)
+            {
+                return;
+            }
+
+            WorldSync.ChooseNewWorld();
+            Note("Pick a map: the city you start replaces the one on the server once it has loaded");
+            OpenNewGameScreen();
         }
 
         /// <summary>Dev trigger: after "New city" connects, start a game on a map instead of waiting for a click.</summary>
@@ -1063,6 +1096,12 @@ namespace Multiplayer
         private static string Base64(string value)
         {
             return Convert.ToBase64String(Encoding.UTF8.GetBytes(value ?? string.Empty));
+        }
+
+        /// <summary>A line for the log and the panel's recent list (what systems outside this class may say to the player).</summary>
+        public void Notice(string line)
+        {
+            Note(line);
         }
 
         private void Note(string line)
