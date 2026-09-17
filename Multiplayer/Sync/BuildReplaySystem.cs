@@ -16,10 +16,11 @@ namespace Multiplayer.Sync
     /// Applies other players' build commands. Runs in the ToolUpdate phase right before the game's
     /// ToolOutputSystem, which is the one place where the active tool's apply mode can be overridden for
     /// the frame. Sequence per command:
-    ///   1. make sure the default (selection) tool is active and no temp entities are lying around;
-    ///   2. create the definition entities; the game's generators turn them into temps later this frame;
-    ///   3. next frame, set the default tool's apply mode to Apply so the output system realises the temps;
-    ///   4. give the player their tool back.
+    ///   1. remove the definitions the player's own tool emitted this frame and clear any temps, so nothing of
+    ///      theirs gets applied along with ours (their preview blinks for a few frames; the tool itself and the
+    ///      toolbar are left alone);
+    ///   2. create our definition entities; the game's generators turn them into temps later this frame;
+    ///   3. next frame, set the active tool's apply mode to Apply so the output system realises the temps.
     /// The capture system is told to stay quiet during step 3 so nothing is echoed to the server.
     /// </summary>
     public partial class BuildReplaySystem : GameSystemBase
@@ -49,8 +50,8 @@ namespace Multiplayer.Sync
 
         private Phase m_Phase = Phase.Idle;
         private QueuedBuild m_Current;
-        /// <summary>The player's tool, paused (not switched away) for the few frames a remote build takes to land.</summary>
-        private ToolBaseSystem m_FrozenTool;
+        /// <summary>The definition entities the player's tool emits each frame; held back while a remote build lands.</summary>
+        private EntityQuery m_DefinitionQuery;
         private int m_InjectedCount;
         private int m_Batched;
         private string m_Problem;
@@ -61,7 +62,7 @@ namespace Multiplayer.Sync
         public int QueueLength => m_Queue.Count;
 
         /// <summary>True while another player's build is being realised here (its temps are not the local player's preview).</summary>
-        public bool IsApplying => m_Phase != Phase.Idle || m_FrozenTool != null;
+        public bool IsApplying => m_Phase != Phase.Idle;
 
         public int ReplayedCount => m_Replayed;
 
@@ -91,10 +92,6 @@ namespace Multiplayer.Sync
         public void Clear()
         {
             m_Queue.Clear();
-            if (m_Phase == Phase.Idle)
-            {
-                ReleaseTool();
-            }
         }
 
         protected override void OnCreate()
@@ -104,6 +101,7 @@ namespace Multiplayer.Sync
             m_DefaultTool = World.GetOrCreateSystemManaged<DefaultToolSystem>();
             m_PrefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
             m_TempQuery = GetEntityQuery(ComponentType.ReadOnly<Temp>());
+            m_DefinitionQuery = GetEntityQuery(ComponentType.ReadOnly<CreationDefinition>());
             m_TempErrorQuery = GetEntityQuery(ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<Error>());
             m_TempIconQuery = GetEntityQuery(ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<Icon>(), ComponentType.ReadOnly<PrefabRef>());
             m_Resolver = new EntityResolver(World, m_PrefabSystem);
@@ -162,6 +160,7 @@ namespace Multiplayer.Sync
                     return;
 
                 case Phase.WaitingForClear:
+                    HoldPlayerDefinitions();
                     if (!m_TempQuery.IsEmptyIgnoreFilter)
                     {
                         SetApplyMode(ApplyMode.Clear);
@@ -173,6 +172,7 @@ namespace Multiplayer.Sync
 
                 case Phase.Injected:
                 {
+                    HoldPlayerDefinitions();
                     int errors = m_TempErrorQuery.CalculateEntityCount();
                     int temps = m_TempQuery.CalculateEntityCount();
                     if (temps == 0)
@@ -206,6 +206,7 @@ namespace Multiplayer.Sync
                 }
 
                 case Phase.Applied:
+                    HoldPlayerDefinitions();
                     m_Replayed += 1 + m_Batched;
                     Mod.log.Info("Replayed " + m_Current.Command + " from player " + m_Current.FromPlayer + " (" + m_InjectedCount + " definitions" + (m_Batched > 0 ? ", " + m_Batched + " more stroke command(s) with it" : "") + ")");
                     Report(m_Problem == null, m_Problem ?? string.Empty);
@@ -264,66 +265,46 @@ namespace Multiplayer.Sync
 
         /// <summary>True when the default tool is active. Otherwise waits a little for the player, then borrows the tool.</summary>
         /// <summary>
-        /// Gets the tool pipeline ready for our definitions without changing the player's tool selection: the
-        /// active tool is paused (its system disabled) so it stops producing its own preview for the few frames
-        /// the remote build takes, and its apply mode is what the output system reads. Switching tools instead
-        /// would reset the toolbar every time someone else placed something.
+        /// Gets the tool pipeline ready for our definitions without touching the player's tool selection or the
+        /// tool system itself: the definitions their tool emitted this frame are removed before the generators
+        /// see them, so for the few frames a remote build takes only our definitions turn into temps. Their
+        /// preview blinks for those frames and comes back on its own; the toolbar never changes.
         /// </summary>
         private bool PrepareTool()
         {
-            ToolBaseSystem active = m_ToolSystem.activeTool;
-            if (active == null)
+            if (m_ToolSystem.activeTool == null)
             {
                 return false;
-            }
-
-            if (m_FrozenTool != null && m_FrozenTool != active)
-            {
-                // The player switched tools while one was paused: let the old one go and deal with the new one.
-                m_FrozenTool.Enabled = true;
-                m_FrozenTool = null;
-            }
-
-            if (active == m_DefaultTool || m_FrozenTool == active)
-            {
-                return true;
             }
 
             if (m_ToolSystem.applyMode == ApplyMode.Apply)
             {
-                // The player is placing something this very frame; let that land first.
+                // The player is placing something this very frame; let that land untouched first.
                 return false;
             }
 
-            m_FrozenTool = active;
-            m_FrozenTool.Enabled = false;
+            HoldPlayerDefinitions();
             return true;
         }
 
-        private void ReleaseTool()
+        /// <summary>Destroys the definitions the player's tool made this frame; ours (already injected) stay.</summary>
+        private void HoldPlayerDefinitions()
         {
-            if (m_FrozenTool == null)
+            if (m_DefinitionQuery.IsEmptyIgnoreFilter)
             {
                 return;
             }
 
-            try
+            using (Unity.Collections.NativeArray<Entity> definitions = m_DefinitionQuery.ToEntityArray(Unity.Collections.Allocator.Temp))
             {
-                SetApplyMode(ApplyMode.None);
+                for (int i = 0; i < definitions.Length; i++)
+                {
+                    if (!m_Injected.Contains(definitions[i]))
+                    {
+                        EntityManager.DestroyEntity(definitions[i]);
+                    }
+                }
             }
-            catch (Exception)
-            {
-                // The setter is checked at creation; nothing else to do here.
-            }
-
-            m_FrozenTool.Enabled = true;
-            m_FrozenTool = null;
-        }
-
-        protected override void OnDestroy()
-        {
-            ReleaseTool();
-            base.OnDestroy();
         }
 
         /// <summary>
@@ -472,13 +453,14 @@ namespace Multiplayer.Sync
             m_Injected.Clear();
             m_Phase = Phase.Idle;
             m_Current = null;
-            if (m_Queue.Count > 0)
+            try
             {
-                // Keep the tool paused until the queue drains.
-                return;
+                SetApplyMode(ApplyMode.None);
             }
-
-            ReleaseTool();
+            catch (Exception)
+            {
+                // The setter is checked at creation; nothing else to do here.
+            }
         }
 
         private void SetApplyMode(ApplyMode mode)
