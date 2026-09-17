@@ -280,9 +280,15 @@ namespace Multiplayer.Core.Session
             return open > 0 ? entry.Substring(0, open).Trim() : (entry ?? string.Empty);
         }
 
+        /// <summary>This mod itself, by name or by its Paradox id: never part of the comparison, since everyone in a session runs it.</summary>
         private static bool IsOwn(string mod, string ownName)
         {
-            return !string.IsNullOrEmpty(ownName) && string.Equals(mod, ownName, StringComparison.OrdinalIgnoreCase);
+            if (!string.IsNullOrEmpty(ownName) && string.Equals(mod, ownName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return string.Equals(PdxId(mod), ProtocolConstants.ParadoxModId.ToString(), StringComparison.Ordinal);
         }
 
         private static string Join(List<string> items, int limit)

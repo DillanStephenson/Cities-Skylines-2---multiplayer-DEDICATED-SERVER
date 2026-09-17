@@ -125,7 +125,8 @@ namespace Multiplayer
                         && (bool?)mod["isEnabled"] == true)
                     {
                         string id = (string)mod["sourceId"];
-                        if (!string.IsNullOrEmpty(id))
+                        // This mod itself, installed from Paradox Mods, is not part of the comparison: everyone in a session has it.
+                        if (!string.IsNullOrEmpty(id) && id != Core.Protocol.ProtocolConstants.ParadoxModId.ToString())
                         {
                             ids.Add(id);
                         }

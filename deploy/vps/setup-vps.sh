@@ -52,7 +52,7 @@ if [ ! -f "$CONFIG" ]; then
   "ownerKey": "$(json_escape "$OWNER_KEY")",
   "_ownerKey": "Whoever enters this under Join > Owner key is the host. Keep it out of the group chat.",
   "gameVersion": "$(json_escape "$OLD_GAME")",
-  "_gameVersion": "Players must run exactly this game build (Logs\\Multiplayer.log on a PC prints it). Empty = not checked.",
+  "_gameVersion": "Players must run exactly this game build (Logs/Multiplayer.log on a PC prints it). Empty = not checked.",
   "maxPlayers": 8,
   "modCheck": "$(json_escape "$OLD_MODCHECK")",
   "_modCheck": "names = same mods as the host at any version. strict = same versions too. off = no check.",

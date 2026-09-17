@@ -84,7 +84,7 @@ namespace Multiplayer.Core.Session
 
                 int id = MiniJson.GetInt(mod, "modId", 0);
                 string name = MiniJson.GetString(mod, "displayName", string.Empty).Trim();
-                if (id <= 0 || string.Equals(name, OwnModName, StringComparison.OrdinalIgnoreCase))
+                if (id <= 0 || id == Multiplayer.Core.Protocol.ProtocolConstants.ParadoxModId || string.Equals(name, OwnModName, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
