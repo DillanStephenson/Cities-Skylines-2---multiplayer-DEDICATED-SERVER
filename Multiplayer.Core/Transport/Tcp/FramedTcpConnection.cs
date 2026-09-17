@@ -29,6 +29,12 @@ namespace Multiplayer.Core.Transport.Tcp
         private volatile string _closeReason;
         private Timer _forceCloseTimer;
 
+        /// <summary>Set when the receive loop has seen the peer close (or fail); the graceful close waits on it.</summary>
+        private readonly ManualResetEventSlim _receiveEnded = new ManualResetEventSlim(false);
+
+        /// <summary>How long a graceful close waits for the peer to read the farewell and close its side.</summary>
+        private const int GracefulDrainMs = 1500;
+
         public int Id { get; }
 
         public bool IsOpen => Volatile.Read(ref _closed) == 0;
@@ -148,6 +154,11 @@ namespace Multiplayer.Core.Transport.Tcp
                 catch (Exception)
                 {
                 }
+
+                // Let the peer read the farewell and close its side first. Closing our socket while it still
+                // holds unread data makes Linux answer with a reset, which throws away what we just sent
+                // (the rejection reason, the kick message). The receive loop keeps draining meanwhile.
+                _receiveEnded.Wait(GracefulDrainMs);
             }
             catch (Exception ex)
             {
@@ -201,6 +212,7 @@ namespace Multiplayer.Core.Transport.Tcp
             }
             finally
             {
+                _receiveEnded.Set();
                 string closeReason = _closeReason;
                 Abort(closeReason ?? reason);
                 RaiseDisconnected(closeReason ?? reason);
