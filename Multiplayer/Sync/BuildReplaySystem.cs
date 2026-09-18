@@ -276,9 +276,12 @@ namespace Multiplayer.Sync
                         return;
                     }
 
-                    // A build that had nothing to attach to went to the back of the queue. If it is all that is
-                    // left, pause before trying it again rather than burning every frame on it.
-                    if (m_Queue.Count == 1 && m_Queue[0].AnchorWaits > 0 && m_FrameCount < m_AnchorRetryUntilFrame)
+                    // Builds that could not be applied yet went to the back of the queue to be tried again. If
+                    // every build waiting is one of those, there is nothing new to do, so pause instead of
+                    // retrying them all every other frame: that would burn the frame budget and hold the
+                    // player's tool for the whole retry window. A single fresh build anywhere in the queue
+                    // cancels the pause, because that one can make progress now.
+                    if (m_FrameCount < m_AnchorRetryUntilFrame && AllWaitingOnRetry())
                     {
                         return;
                     }
@@ -716,6 +719,20 @@ namespace Multiplayer.Sync
         /// is the "it is placing objects for my friend" fault, and the retry paths added tonight would have
         /// brought it back.
         /// </summary>
+        /// <summary>True when every queued build is one that has already been put back to be tried again.</summary>
+        private bool AllWaitingOnRetry()
+        {
+            for (int i = 0; i < m_Queue.Count; i++)
+            {
+                if (m_Queue[i].AnchorWaits == 0)
+                {
+                    return false;
+                }
+            }
+
+            return m_Queue.Count > 0;
+        }
+
         private void DiscardInjected()
         {
             foreach (Entity definition in m_Injected)
