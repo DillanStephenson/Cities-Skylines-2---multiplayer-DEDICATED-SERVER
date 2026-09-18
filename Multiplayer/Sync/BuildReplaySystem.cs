@@ -294,6 +294,16 @@ namespace Multiplayer.Sync
             }
 
             m_FrameCount++;
+
+            // A sync is on: every player must actually stop, not just be shown a box. A box in the interface
+            // does not reach the game's tool input, so players went on building straight through it and the
+            // work they did was then overwritten by the save that arrived. Holding the selection tool is what
+            // really stops it: nothing can be placed, and the player's own tool comes back afterwards.
+            if (FreezeForSync())
+            {
+                return;
+            }
+
             if (m_Received > 0 && m_FrameCount - m_LedgerLoggedAt >= LedgerEveryFrames)
             {
                 m_LedgerLoggedAt = m_FrameCount;
@@ -527,6 +537,75 @@ namespace Multiplayer.Sync
             {
                 return " [could not describe: " + ex.Message + "]";
             }
+        }
+
+        private bool m_Frozen;
+        private int m_FrozenSinceFrame;
+
+        /// <summary>
+        /// A freeze must always end. Three minutes at 60 fps is far longer than any sync should take, and if
+        /// the sync text is ever left set by a path that failed to clear it, the player gets their game back
+        /// rather than being stuck unable to build.
+        /// </summary>
+        private const int FreezeGiveUpFrames = 10800;
+
+        /// <summary>
+        /// Holds the player still while the group is being synced. Returns true while frozen, which stops the
+        /// replay queue from being worked as well: the save on its way already contains all of it.
+        /// </summary>
+        private bool FreezeForSync()
+        {
+            MultiplayerService service = Mod.Service;
+            bool syncing = service != null && !string.IsNullOrEmpty(service.WorldSync.SyncModalText);
+            if (!syncing)
+            {
+                if (m_Frozen)
+                {
+                    m_Frozen = false;
+                    Mod.log.Info("Sync finished; giving the player their tool back");
+                    RestoreTool();
+                }
+
+                return false;
+            }
+
+            if (m_Frozen && m_FrameCount - m_FrozenSinceFrame > FreezeGiveUpFrames)
+            {
+                Mod.log.Warn("Syncing has been going for three minutes; letting this player build again");
+                m_Frozen = false;
+                RestoreTool();
+                return false;
+            }
+
+            if (!m_Frozen)
+            {
+                m_Frozen = true;
+                m_FrozenSinceFrame = m_FrameCount;
+                Mod.log.Info("Syncing: holding this player still until it is done");
+                if (m_SavedTool == null)
+                {
+                    ToolBaseSystem active = m_ToolSystem.activeTool;
+                    if (active != null && active != m_DefaultTool)
+                    {
+                        m_SavedTool = active;
+                        m_SavedPrefab = m_ToolSystem.activePrefab;
+                    }
+                }
+            }
+
+            // Every frame, not once: the tool system re-enables the active tool each frame, and the player can
+            // still click the toolbar while the box is up.
+            if (m_ToolSystem.activeTool != m_DefaultTool)
+            {
+                SetActiveToolQuietly(m_DefaultTool);
+            }
+
+            if (m_ToolSystem.applyMode != ApplyMode.None)
+            {
+                SetApplyMode(ApplyMode.None);
+            }
+
+            return true;
         }
 
         /// <summary>True when the default tool is active. Otherwise waits a little for the player, then borrows the tool.</summary>

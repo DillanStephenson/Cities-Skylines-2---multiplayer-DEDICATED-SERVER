@@ -233,6 +233,8 @@
 
 .gamePanel {
   position: absolute;
+  z-index: 900;
+  pointer-events: auto;
   right: 70rem;
   bottom: 110rem;
   width: 440rem;
