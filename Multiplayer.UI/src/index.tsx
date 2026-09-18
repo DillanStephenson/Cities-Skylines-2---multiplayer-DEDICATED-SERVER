@@ -1,7 +1,7 @@
 import { useValue } from "cs2/api";
 import { ModRegistrar } from "cs2/modding";
 import { screenActive$ } from "mods/bindings";
-import { GamePanel, GameToolbarButton } from "mods/game-panel";
+import { GameFloatingToggle, GamePanel, GameToolbarButton } from "mods/game-panel";
 import { MultiplayerMenuButton } from "mods/menu-button";
 import { MultiplayerScreen } from "mods/multiplayer-screen";
 import { PresenceOverlay } from "mods/presence-overlay";
@@ -54,9 +54,9 @@ const register: ModRegistrar = (moduleRegistry) => {
   const button = attach(registry, "GameBottomRight", GameToolbarButton, "toolbar button");
 
   if (!button && panel) {
-    // No toolbar to put the button in, but the panel itself works. Put the button in the panel's own
-    // corner instead so there is still a way to open it.
-    attach(registry, "GameTopRight", GameToolbarButton, "toolbar button (top right)");
+    // This game version does not offer the toolbar anchor, so there would be no way at all to open the
+    // panel. Pin the button over the game view instead, where the toolbar would have been.
+    attach(registry, "Game", GameFloatingToggle, "floating open button");
   }
 
   if (!modal) {

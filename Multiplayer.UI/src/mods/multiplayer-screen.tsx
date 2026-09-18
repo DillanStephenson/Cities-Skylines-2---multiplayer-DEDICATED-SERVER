@@ -228,11 +228,14 @@ const StatusPanel = () => {
   const worldStatus = useValue(b.worldStatus$);
   const lastError = useValue(b.lastError$);
   const recent = useValue(b.recent$);
+  const health = useValue(b.health$);
+  const warning = useValue(b.warning$);
   const playerLines = players ? players.split("\n") : [];
   const recentLines = recent ? recent.split("\n").slice(-6) : [];
 
   return (
     <div className={styles.status}>
+      {warning && <div className={styles.error}>{warning}</div>}
       <div className={styles.statusRow}>
         <span className={styles.statusKey}>Status</span>
         <span className={online ? styles.statusOnline : styles.statusValue}>{`${state}${online && isOwner ? " as owner" : ""}`}</span>
@@ -241,6 +244,12 @@ const StatusPanel = () => {
         <div className={styles.statusRow}>
           <span className={styles.statusKey}>Server</span>
           <span className={styles.statusValue}>{serverName}</span>
+        </div>
+      )}
+      {online && health && (
+        <div className={styles.statusRow}>
+          <span className={styles.statusKey}>Sync</span>
+          <span className={styles.statusValue}>{health}</span>
         </div>
       )}
       {lastError && <div className={styles.error}>{lastError}</div>}

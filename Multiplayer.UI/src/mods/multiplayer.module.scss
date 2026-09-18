@@ -245,6 +245,24 @@
   color: rgba(255, 255, 255, 0.9);
 }
 
+.gameFloating {
+  position: absolute;
+  z-index: 880;
+  right: 24rem;
+  bottom: 48rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.gameFloatingHint {
+  margin-top: 3rem;
+  font-size: 10rem;
+  color: rgba(255, 255, 255, 0.55);
+  text-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.8);
+}
+
 .gameWarning {
   margin-bottom: 8rem;
   padding: 8rem 10rem;

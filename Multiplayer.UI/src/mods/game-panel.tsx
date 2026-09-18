@@ -28,6 +28,21 @@ export const GameToolbarButton = () => {
   );
 };
 
+/**
+ * The same button, pinned over the game view instead of sitting inside the toolbar. Used when this game
+ * version does not offer the bottom-right toolbar anchor, which is the case in 1.6: without this there was
+ * no way at all to open the panel, which is why it looked as though the panel did not exist.
+ */
+export const GameFloatingToggle = () => {
+  const open = useValue(b.panelOpen$);
+  return (
+    <div className={styles.gameFloating}>
+      <GameToolbarButton />
+      {!open && <div className={styles.gameFloatingHint}>Multiplayer</div>}
+    </div>
+  );
+};
+
 /** The panel the toolbar button opens: status, players, and the session actions. */
 export const GamePanel = () => {
   const open = useValue(b.panelOpen$);
