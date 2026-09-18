@@ -247,6 +247,25 @@ namespace Multiplayer.Sync
                 }
             }
 
+            CoursePos courseStart = default;
+            CoursePos courseEnd = default;
+            if (data.Course != null)
+            {
+                courseStart = CreateCoursePos(data.Course.Start, problems, out bool startLost);
+                courseEnd = CreateCoursePos(data.Course.End, problems, out bool endLost);
+
+                // An end that names a junction this PC does not have, with nothing under the point to join
+                // instead, would be built loose where the sender has it connected. That splits the two road
+                // networks for good and every later edit at that point fails; one such piece was traced as the
+                // origin of more than half of a session's failures. Refuse it: the replay system retries for
+                // ten seconds, which is usually long enough for the missing piece to arrive.
+                if (startLost || endLost)
+                {
+                    problems.Append("skipped: the junction this road joins is not here; ");
+                    return Entity.Null;
+                }
+            }
+
             Entity entity = _entities.CreateEntity();
             _entities.AddComponentData(entity, new CreationDefinition
             {
@@ -263,8 +282,8 @@ namespace Multiplayer.Sync
             {
                 _entities.AddComponentData(entity, new NetCourse
                 {
-                    m_StartPosition = CreateCoursePos(data.Course.Start, problems),
-                    m_EndPosition = CreateCoursePos(data.Course.End, problems),
+                    m_StartPosition = courseStart,
+                    m_EndPosition = courseEnd,
                     m_Curve = new Bezier4x3(
                         EntityResolver.ToFloat3(data.Course.A),
                         EntityResolver.ToFloat3(data.Course.B),
@@ -361,8 +380,9 @@ namespace Multiplayer.Sync
             return entity;
         }
 
-        private CoursePos CreateCoursePos(CoursePosData data, StringBuilder problems)
+        private CoursePos CreateCoursePos(CoursePosData data, StringBuilder problems, out bool lost)
         {
+            lost = false;
             float3 position = EntityResolver.ToFloat3(data.Position);
             Entity anchor = Entity.Null;
             float split = data.SplitPosition;
@@ -385,7 +405,14 @@ namespace Multiplayer.Sync
                     }
                     else
                     {
+                        // Nothing here to join to. The sender's flags still say this end is attached to a
+                        // junction, so building it anyway produced a road with a loose end where the other PC
+                        // has it joined: the two cities' road network then differs at that point for good, and
+                        // every later edit there fails. One such build was traced as the origin of more than
+                        // half of a session's failures. Refuse the whole definition instead; the replay system
+                        // retries for ten seconds, which is usually long enough for the piece it needs to land.
                         problems.Append("course anchor: ").Append(failure).Append("; nothing under the point to join; ");
+                        lost = true;
                     }
                 }
             }
