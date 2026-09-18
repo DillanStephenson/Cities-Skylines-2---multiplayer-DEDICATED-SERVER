@@ -229,7 +229,7 @@ namespace Multiplayer.Sync
                     m_Queue.Clear();
                 }
 
-                m_Injected.Clear();
+                DiscardInjected();
                 m_Phase = Phase.Idle;
                 m_Current = null;
                 m_SavedTool = null;
@@ -355,7 +355,7 @@ namespace Multiplayer.Sync
                                 SetApplyMode(ApplyMode.Clear);
                                 m_Queue.Add(m_Current);
                                 m_AnchorRetryUntilFrame = m_FrameCount + AnchorRetryFrames;
-                                m_Injected.Clear();
+                                DiscardInjected();
                                 m_Phase = Phase.Idle;
                                 m_Current = null;
                                 return;
@@ -606,7 +606,7 @@ namespace Multiplayer.Sync
             m_InjectedCount = 0;
             m_Batched = 0;
             m_Problem = null;
-            m_Injected.Clear();
+            DiscardInjected();
             InjectDefinitions(m_Current.Command, problems);
 
             // The terrain tool sends one stroke per frame while the mouse is held. Replaying them one command
@@ -644,7 +644,7 @@ namespace Multiplayer.Sync
                     // build still on its way, so everything behind it should go first rather than be stalled.
                     m_Queue.Add(m_Current);
                     m_AnchorRetryUntilFrame = m_FrameCount + AnchorRetryFrames;
-                    m_Injected.Clear();
+                    DiscardInjected();
                     m_Phase = Phase.Idle;
                     m_Current = null;
                     return;
@@ -708,10 +708,16 @@ namespace Multiplayer.Sync
             }
         }
 
-        private void Finish()
+        /// <summary>
+        /// Destroys the definition entities this system created and forgets them. Every path that abandons a
+        /// replay must come through here. Merely clearing the list left the definitions alive in the world with
+        /// nothing owning them: the capture system's OwnsDefinition check reads the same list, so once it was
+        /// cleared those definitions looked like the local player's own work and were broadcast back out. That
+        /// is the "it is placing objects for my friend" fault, and the retry paths added tonight would have
+        /// brought it back.
+        /// </summary>
+        private void DiscardInjected()
         {
-            // The generators consumed the definitions in the inject frame; nothing else cleans them up when
-            // no tool owns them, and a later capture would pick stale ones up again.
             foreach (Entity definition in m_Injected)
             {
                 if (EntityManager.Exists(definition))
@@ -721,6 +727,13 @@ namespace Multiplayer.Sync
             }
 
             m_Injected.Clear();
+        }
+
+        private void Finish()
+        {
+            // The generators consumed the definitions in the inject frame; nothing else cleans them up when
+            // no tool owns them, and a later capture would pick stale ones up again.
+            DiscardInjected();
             m_Phase = Phase.Idle;
             m_Current = null;
             if (m_Queue.Count > 0)
