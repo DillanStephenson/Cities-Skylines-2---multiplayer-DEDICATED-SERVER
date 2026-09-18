@@ -76,6 +76,43 @@ namespace Multiplayer.Sync
         private string m_Problem;
         private int m_Replayed;
         private int m_Failed;
+
+        // The ledger. Every build that arrives ends up in exactly one of these, so a session can be checked
+        // afterwards by arithmetic instead of by reading the log: received == replayed + batched + skipped,
+        // and partial says how many of the replayed ones the game here only half-accepted.
+        private int m_Received;
+        private int m_BatchedTotal;
+        private int m_Skipped;
+        private int m_Partial;
+        private int m_Retried;
+        private int m_LedgerLoggedAt;
+
+        /// <summary>Roughly every two minutes at 60 fps.</summary>
+        private const int LedgerEveryFrames = 7200;
+
+        public int ReceivedCount => m_Received;
+
+        public int BatchedCount => m_BatchedTotal;
+
+        public int SkippedCount => m_Skipped;
+
+        public int PartialCount => m_Partial;
+
+        public int RetriedCount => m_Retried;
+
+        /// <summary>One line the player or the log can be shown: what happened to every build that arrived.</summary>
+        public string Ledger()
+        {
+            int accounted = m_Replayed + m_BatchedTotal + m_Skipped;
+            return "received " + m_Received
+                + ", replayed " + m_Replayed
+                + ", batched " + m_BatchedTotal
+                + ", part-built " + m_Partial
+                + ", retried " + m_Retried
+                + ", given up " + m_Skipped
+                + ", waiting " + m_Queue.Count
+                + (accounted + m_Queue.Count == m_Received ? "" : " (UNACCOUNTED " + (m_Received - accounted - m_Queue.Count) + ")");
+        }
         private readonly List<Entity> m_Injected = new List<Entity>();
 
         public int QueueLength => m_Queue.Count;
@@ -126,6 +163,7 @@ namespace Multiplayer.Sync
                 return;
             }
 
+            m_Received++;
             m_Queue.Add(new QueuedBuild { Command = command, FromPlayer = fromPlayer, CaptureAnyway = captureAnyway });
         }
 
@@ -187,6 +225,7 @@ namespace Multiplayer.Sync
                 if (m_Queue.Count > 0)
                 {
                     Mod.log.Info("Dropping " + m_Queue.Count + " queued build(s): the city is being replaced and the save already holds them");
+                    m_Skipped += m_Queue.Count;
                     m_Queue.Clear();
                 }
 
@@ -199,6 +238,12 @@ namespace Multiplayer.Sync
             }
 
             m_FrameCount++;
+            if (m_Received > 0 && m_FrameCount - m_LedgerLoggedAt >= LedgerEveryFrames)
+            {
+                m_LedgerLoggedAt = m_FrameCount;
+                Mod.log.Info("Build ledger: " + Ledger());
+            }
+
             Step();
             SwallowBorrowedClick();
         }
@@ -297,6 +342,7 @@ namespace Multiplayer.Sync
                             // cities no longer agree about what is on the ground. It used to be logged and
                             // then applied in part, without ever counting as a failure, so the drift detector
                             // never saw the one signal that actually means "these cities have diverged".
+                            m_Partial++;
                             NoteFailure();
                         }
                         else
@@ -313,7 +359,8 @@ namespace Multiplayer.Sync
                 }
 
                 case Phase.Applied:
-                    m_Replayed += 1 + m_Batched;
+                    m_Replayed++;
+                    m_BatchedTotal += m_Batched;
                     Mod.log.Info("Replayed " + m_Current.Command + " from player " + m_Current.FromPlayer + " (" + m_InjectedCount + " definitions" + (m_Batched > 0 ? ", " + m_Batched + " more stroke command(s) with it" : "") + ")");
                     Report(m_Problem == null, m_Problem ?? string.Empty);
                     Finish();
@@ -565,6 +612,7 @@ namespace Multiplayer.Sync
                     m_Current.AnchorWaits++;
                     if (m_Current.AnchorWaits == 1)
                     {
+                        m_Retried++;
                         Mod.log.Info("Replay of " + m_Current.Command + " waits: nothing to attach to here yet" + (problems.Length > 0 ? " (" + problems + ")" : ""));
                     }
 
@@ -580,6 +628,7 @@ namespace Multiplayer.Sync
 
                 Mod.log.Warn("Replay of " + m_Current.Command + " skipped after " + AnchorRetryLimit + " tries: nothing could be recreated here");
                 NoteFailure();
+                m_Skipped++;
                 m_Failed++;
                 Report(false, "nothing could be recreated here" + (problems.Length > 0 ? ": " + problems : ""));
                 Finish();

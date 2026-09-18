@@ -1337,10 +1337,16 @@ namespace Multiplayer
             if (Session.State == SessionState.Connected)
             {
                 Sync.BuildReplaySystem replay = Replay;
-                builder.Append('\n').Append("Build sync: sent ").Append(_buildsSent).Append(", received ").Append(_buildsReceived);
+                builder.Append('\n').Append("Build sync: sent ").Append(_buildsSent);
                 if (replay != null)
                 {
-                    builder.Append(", applied ").Append(replay.ReplayedCount).Append(", failed ").Append(replay.FailedCount).Append(", queued ").Append(replay.QueueLength);
+                    // Every build that arrived is in exactly one of these, so the numbers can be checked by
+                    // adding them up rather than by reading the log.
+                    builder.Append("; ").Append(replay.Ledger());
+                }
+                else
+                {
+                    builder.Append(", received ").Append(_buildsReceived);
                 }
 
                 builder.Append("; city settings: sent ").Append(_stateSent).Append(", received ").Append(_stateReceived);
