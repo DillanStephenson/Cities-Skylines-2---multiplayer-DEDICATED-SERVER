@@ -1365,6 +1365,11 @@ namespace Multiplayer
                 }
             }
 
+            if (!string.IsNullOrEmpty(Mod.DuplicateWarning))
+            {
+                builder.Insert(0, "INSTALLED TWICE. " + Mod.DuplicateWarning + Environment.NewLine + Environment.NewLine);
+            }
+
             StatusText = builder.ToString();
         }
 

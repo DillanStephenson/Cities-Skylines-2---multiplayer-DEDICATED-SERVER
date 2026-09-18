@@ -245,6 +245,24 @@
   color: rgba(255, 255, 255, 0.9);
 }
 
+.gameWarning {
+  margin-bottom: 8rem;
+  padding: 8rem 10rem;
+  border-radius: 4rem;
+  background-color: rgba(190, 70, 40, 0.28);
+  border: 1rem solid rgba(240, 130, 90, 0.5);
+  color: rgba(255, 225, 215, 0.95);
+  font-size: 12rem;
+  line-height: 16rem;
+}
+
+.gameLedger {
+  margin-top: 6rem;
+  font-size: 11rem;
+  line-height: 15rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
 .gamePanelHeader {
   display: flex;
   align-items: center;

@@ -105,6 +105,9 @@ namespace Multiplayer
             AddBinding(m_PanelOpen = new ValueBinding<bool>(Group, "panelOpen", false));
             AddBinding(new TriggerBinding(Group, "togglePanel", TogglePanel));
             AddBinding(m_SyncModal = new ValueBinding<string>(Group, "syncModal", string.Empty));
+            AddBinding(m_Ledger = new ValueBinding<string>(Group, "ledger", string.Empty));
+            AddBinding(m_Warning = new ValueBinding<string>(Group, "warning", Mod.DuplicateWarning ?? string.Empty));
+            AddBinding(m_Health = new ValueBinding<string>(Group, "health", string.Empty));
             AddBinding(m_IsLeader = new ValueBinding<bool>(Group, "isLeader", false));
             AddBinding(new TriggerBinding(Group, "syncNow", () => Mod.Service?.ForceSyncNow()));
             AddBinding(m_RequestedView = new ValueBinding<string>(Group, "requestedView", string.Empty));
@@ -206,8 +209,57 @@ namespace Multiplayer
 
             m_HostChoice.Update(hostChoice);
             m_SyncModal.Update(inGame ? service.WorldSync.SyncModalText ?? string.Empty : string.Empty);
+
+            // One source for how the session is doing, shown the same way in the panel, on the menu screen and
+            // on the Options page, so the three never disagree about what is happening.
+            Sync.BuildReplaySystem replay = inGame ? World.GetExistingSystemManaged<Sync.BuildReplaySystem>() : null;
+            m_Ledger.Update(replay != null ? replay.Ledger() : string.Empty);
+            m_Health.Update(Health(service, replay));
             m_IsLeader.Update(service.IsLeader);
             m_TransferBusy.Update(service.WorldSync.IsBusy);
+        }
+
+        private ValueBinding<string> m_Ledger;
+        private ValueBinding<string> m_Warning;
+        private ValueBinding<string> m_Health;
+
+        /// <summary>
+        /// One word for how this player's city is doing, from the same numbers everywhere: whether a sync is
+        /// running, whether builds are waiting, and how many of the others' builds this game gave up on.
+        /// </summary>
+        private static string Health(MultiplayerService service, Sync.BuildReplaySystem replay)
+        {
+            if (service.Session.State != SessionState.Connected)
+            {
+                return string.Empty;
+            }
+
+            if (!string.IsNullOrEmpty(service.WorldSync.SyncModalText))
+            {
+                return "Syncing";
+            }
+
+            if (service.WorldSync.ResyncPending)
+            {
+                return "Waiting for a fresh save";
+            }
+
+            if (replay == null)
+            {
+                return "Connected";
+            }
+
+            if (replay.SkippedCount > 0)
+            {
+                return "Out of step (" + replay.SkippedCount + " of the others' builds could not be made here)";
+            }
+
+            if (replay.QueueLength > 0)
+            {
+                return "Catching up (" + replay.QueueLength + " to go)";
+            }
+
+            return "In step";
         }
 
         /// <summary>Screen positions for the other players' name tags: [{"id":2,"n":"Bob","x":312,"y":540,"off":false,"c":"#ff9e33"}].</summary>

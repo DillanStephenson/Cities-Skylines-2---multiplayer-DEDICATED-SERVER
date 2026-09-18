@@ -38,6 +38,14 @@ export const syncModal$ = bindValue<string>(GROUP, "syncModal", "");
 export const isLeader$ = bindValue<boolean>(GROUP, "isLeader", false);
 export const syncNow = () => trigger(GROUP, "syncNow");
 
+/** One line saying how this player's city is doing; the same words the Options page and the menu screen use. */
+export const health$ = bindValue<string>(GROUP, "health", "");
+/** What happened to every build that has arrived: replayed, batched, retried, given up, waiting. */
+export const ledger$ = bindValue<string>(GROUP, "ledger", "");
+
+/** A problem with the installation itself, such as the mod being installed twice. Empty when all is well. */
+export const warning$ = bindValue<string>(GROUP, "warning", "");
+
 /** Whether the in-game panel is open. Kept on the C# side so the toolbar button and the panel always agree. */
 export const panelOpen$ = bindValue<boolean>(GROUP, "panelOpen", false);
 export const togglePanel = () => trigger(GROUP, "togglePanel");

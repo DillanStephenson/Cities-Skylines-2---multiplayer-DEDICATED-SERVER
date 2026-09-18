@@ -43,6 +43,9 @@ export const GamePanel = () => {
   const joinAddress = useValue(b.joinAddress$);
   const busy = useValue(b.transferBusy$);
   const isLeader = useValue(b.isLeader$);
+  const health = useValue(b.health$);
+  const warning = useValue(b.warning$);
+  const ledger = useValue(b.ledger$);
   if (!open) {
     return null;
   }
@@ -58,6 +61,8 @@ export const GamePanel = () => {
           <img src="Media/Glyphs/Close.svg" className={styles.gameCloseIcon} />
         </Button>
       </div>
+
+      {warning && <div className={styles.gameWarning}>{warning}</div>}
 
       <div className={styles.gameRow}>
         <span className={styles.gameKey}>Status</span>
@@ -81,7 +86,14 @@ export const GamePanel = () => {
           <span className={styles.statusValue}>{world}</span>
         </div>
       )}
+      {online && health && (
+        <div className={styles.gameRow}>
+          <span className={styles.gameKey}>Sync</span>
+          <span className={styles.statusValue}>{health}</span>
+        </div>
+      )}
       {worldStatus && <div className={styles.gameTransfer}>{worldStatus}</div>}
+      {online && ledger && <div className={styles.gameLedger}>{ledger}</div>}
       {recentLines.length > 0 && (
         <div className={styles.gameLog}>
           {recentLines.map((line, index) => (
