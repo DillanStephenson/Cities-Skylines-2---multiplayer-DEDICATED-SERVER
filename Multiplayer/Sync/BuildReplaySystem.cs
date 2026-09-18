@@ -278,6 +278,24 @@ namespace Multiplayer.Sync
             GameManager manager = GameManager.instance;
             if (manager == null || manager.gameMode != GameMode.Game || manager.isGameLoading)
             {
+                // Reloading the very save that is running (for Road Builder's new roads) is the exception: that save
+                // is older than what is queued, so the queue is kept and replayed once the city is back.
+                MultiplayerService keeper = Mod.Service;
+                if (keeper != null && keeper.WorldSync.ReloadingSameSave)
+                {
+                    DiscardInjected();
+                    m_Phase = Phase.Idle;
+                    if (m_Current != null)
+                    {
+                        m_Queue.Insert(0, m_Current);
+                        m_Current = null;
+                    }
+
+                    m_SavedTool = null;
+                    m_SavedPrefab = null;
+                    return;
+                }
+
                 if (m_Queue.Count > 0)
                 {
                     Mod.log.Info("Dropping " + m_Queue.Count + " queued build(s): the city is being replaced and the save already holds them");

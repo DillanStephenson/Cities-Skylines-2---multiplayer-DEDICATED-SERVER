@@ -1,14 +1,14 @@
 import { useValue } from "cs2/api";
+import { useEffect, useState } from "react";
 import { Button } from "cs2/ui";
 import * as b from "./bindings";
 import styles from "./multiplayer.module.scss";
 
-/**
- * Round button in the bottom-right toolbar; a green dot shows while connected. The click is taken both
- * through the game's onSelect and a plain onClick, whichever the toolbar lets through; the C# side ignores
- * the second of two toggles in the same instant, so one click is always one toggle.
- */
-export const GameToolbarButton = () => {
+/** True while the button in the game's own bottom-right toolbar is on screen. */
+let toolbarButtonShown = false;
+
+/** The round Multiplayer button itself; a green dot shows while connected. */
+const ToggleButton = () => {
   const online = useValue(b.online$);
   const open = useValue(b.panelOpen$);
   return (
@@ -29,15 +29,46 @@ export const GameToolbarButton = () => {
 };
 
 /**
- * The same button, pinned over the game view instead of sitting inside the toolbar. Used when this game
- * version does not offer the bottom-right toolbar anchor, which is the case in 1.6: without this there was
- * no way at all to open the panel, which is why it looked as though the panel did not exist.
+ * The button in the game's bottom-right toolbar. The click is taken both through the game's onSelect and a
+ * plain onClick, whichever the toolbar lets through; the C# side ignores the second of two toggles in the same
+ * instant, so one click is always one toggle. It records that it is on screen, so the floating copy stays away.
+ */
+export const GameToolbarButton = () => {
+  useEffect(() => {
+    toolbarButtonShown = true;
+    return () => {
+      toolbarButtonShown = false;
+    };
+  }, []);
+  return <ToggleButton />;
+};
+
+/**
+ * The same button pinned over the game view, for when the toolbar slot does not show it. Whether a game version
+ * offers that slot cannot be asked up front (hasAppend answered "no" for slots that work), so this looks after a
+ * moment instead, and keeps looking: it shows only while the toolbar copy is absent, so there is always exactly
+ * one way to open the panel and never two.
  */
 export const GameFloatingToggle = () => {
   const open = useValue(b.panelOpen$);
+  const [needed, setNeeded] = useState(false);
+  useEffect(() => {
+    const check = () => setNeeded(!toolbarButtonShown);
+    const first = setTimeout(check, 1500);
+    const again = setInterval(check, 5000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(again);
+    };
+  }, []);
+
+  if (!needed) {
+    return null;
+  }
+
   return (
     <div className={styles.gameFloating}>
-      <GameToolbarButton />
+      <ToggleButton />
       {!open && <div className={styles.gameFloatingHint}>Multiplayer</div>}
     </div>
   );

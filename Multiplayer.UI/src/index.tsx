@@ -12,19 +12,16 @@ const CREDITS = "game-ui/menu/components/credits-screen/credits-screen.tsx";
 
 const log = (message: string) => console.log("[Multiplayer] " + message);
 
+const REGISTERED = "multiplayer-coop/registered";
+
 /**
- * Attaches one component to one of the game's anchors. Each one is attempted on its own: they used to share
- * a single try block, so the first anchor the game did not recognise took every later one down with it and
- * the panel, the presence overlay and the syncing box were silently never registered at all. Every outcome
- * is logged, so UI.log says exactly which parts of the interface exist in this game version.
+ * Attaches one component to one of the game's anchors, logging the outcome to UI.log. Deliberately does NOT ask
+ * hasAppend first: in this game version it answered "no" for "Game" after the interface reloaded, which is a slot
+ * that works, so gating on it left the panel, the syncing box and the player markers out entirely. Each part is
+ * attached in its own try, so one failure cannot take the rest down with it.
  */
 const attach = (registry: any, target: string, component: any, name: string): boolean => {
   try {
-    if (typeof registry.hasAppend === "function" && !registry.hasAppend(target)) {
-      console.warn(`[Multiplayer] anchor "${target}" is not offered by this game version; ${name} not shown`);
-      return false;
-    }
-
     registry.append(target, component);
     log(`${name} attached to ${target}`);
     return true;
@@ -42,6 +39,16 @@ const attach = (registry: any, target: string, component: any, name: string): bo
  *    opening it is how a mod gets a full sub-screen with the game's backdrop, title bar and back button.
  */
 const register: ModRegistrar = (moduleRegistry) => {
+  // Two copies of this mod (a local build and a subscribed one) serve the same module URL, so the game can hand
+  // this registry our registration twice. Only the first may run, or every panel, box and button would appear
+  // twice. The marker lives in the registry itself, not on the page: when the game resets the registry and
+  // registers every mod again, the marker is gone with everything else and this registers afresh.
+  if (moduleRegistry.registry.has(REGISTERED)) {
+    console.warn("[Multiplayer] this mod's interface was registered twice into the same registry; ignoring the second");
+    return;
+  }
+
+  moduleRegistry.add(REGISTERED, {});
   log("UI module registering...");
 
   // In a city: the toolbar button, the panel it opens, the other players' markers, and the syncing box.
@@ -49,15 +56,13 @@ const register: ModRegistrar = (moduleRegistry) => {
   // a player building while everyone is being brought back into step.
   const registry = moduleRegistry as any;
   const modal = attach(registry, "Game", SyncModal, "syncing box");
-  const panel = attach(registry, "Game", GamePanel, "in-game panel");
+  attach(registry, "Game", GamePanel, "in-game panel");
   attach(registry, "Game", PresenceOverlay, "player markers");
-  const button = attach(registry, "GameBottomRight", GameToolbarButton, "toolbar button");
+  attach(registry, "GameBottomRight", GameToolbarButton, "toolbar button");
 
-  if (!button && panel) {
-    // This game version does not offer the toolbar anchor, so there would be no way at all to open the
-    // panel. Pin the button over the game view instead, where the toolbar would have been.
-    attach(registry, "Game", GameFloatingToggle, "floating open button");
-  }
+  // Always attached, but it only shows itself while the toolbar button is not on screen, so there is always
+  // exactly one way to open the panel.
+  attach(registry, "Game", GameFloatingToggle, "floating open button");
 
   if (!modal) {
     console.warn("[Multiplayer] the syncing box could not be attached; a forced sync will not block this player");

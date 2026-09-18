@@ -101,7 +101,7 @@ namespace Multiplayer
             set { Mod.Service?.FetchCityNow(); }
         }
 
-        [SettingsUISlider(min = 0, max = 30, step = 1, scalarMultiplier = 1)]
+        [SettingsUISlider(min = 0, max = 30, step = 5, scalarMultiplier = 1)]
         [SettingsUISection(kSection, kSessionGroup)]
         public int AutoUploadMinutes { get; set; }
 

@@ -36,6 +36,7 @@ namespace Multiplayer
         private const int RegisterWaitFrames = 600;
         private const int NewCityGraceMs = 10000;
         private const long RecentBuildMs = 120000;
+        private const int MinAutoUploadMinutes = 5;
 
         /// <summary>When the local player last placed or removed something (service clock); 0 when never.</summary>
         public long LastLocalBuildMs { get; set; }
@@ -68,6 +69,74 @@ namespace Multiplayer
         }
 
         private static ILog _staticLog;
+
+        // ---------------------------------------------------------------- Road Builder reload
+
+        /// <summary>True between this mod starting a load of the shared city and that load completing.</summary>
+        public bool IsLoadingSharedCity => _awaitingLoadRevision != 0;
+
+        /// <summary>
+        /// True once the automatic reload for new Road Builder roads has happened for the city currently loaded,
+        /// so it can never loop. Cleared whenever a freshly downloaded city starts loading.
+        /// </summary>
+        public bool RoadReloadDone { get; private set; }
+
+        /// <summary>
+        /// True while that reload is under way. It reloads the very save that is already running, so builds that
+        /// arrived since are not in it and must be kept for replay rather than dropped, which is what happens to
+        /// them when a newer save is loaded.
+        /// </summary>
+        public bool ReloadingSameSave { get; private set; }
+
+        private SaveInfo _loadedSaveInfo;
+        private bool _roadReloadRequested;
+
+        /// <summary>Called when new Road Builder roads were finished during a load: reload the same city once.</summary>
+        public void RequestRoadReload()
+        {
+            _roadReloadRequested = true;
+        }
+
+        private void RunRoadReloadIfDue()
+        {
+            if (!_roadReloadRequested)
+            {
+                return;
+            }
+
+            GameManager manager = GameManager.instance;
+            if (manager == null || manager.gameMode != GameMode.Game || manager.isGameLoading || _busy)
+            {
+                return;
+            }
+
+            _roadReloadRequested = false;
+            if (_loadedSaveInfo == null || RoadReloadDone)
+            {
+                return;
+            }
+
+            RoadReloadDone = true;
+            ReloadingSameSave = true;
+            _busy = true;
+            _busyWhat = "loading the custom roads";
+            _awaitingLoadRevision = _loadedRevision != 0 ? _loadedRevision : 1;
+            SyncModalText = "This city has custom roads that were new on this PC. Loading it once more so they come out right.";
+            _note("Custom roads new to this PC: loading the city once more, which Road Builder needs");
+            try
+            {
+                LoadThroughMenu(_loadedSaveInfo);
+            }
+            catch (Exception ex)
+            {
+                _log.Warn("Could not reload the city for its custom roads: " + ex.Message);
+                _note("Could not reload the city by itself; reload it from the panel if roads look wrong");
+                ReloadingSameSave = false;
+                SyncModalText = string.Empty;
+                _awaitingLoadRevision = 0;
+                Idle();
+            }
+        }
 
         /// <summary>A resync that never arrives must not silence this game forever; see <see cref="ResyncWaitLimitMs"/>.</summary>
         private const long ResyncWaitLimitMs = 120000;
@@ -378,6 +447,7 @@ namespace Multiplayer
             // from here, so that every stamp and every comparison uses one clock.
             _lastUpdateMs = nowMs;
             ExpireResync(nowMs);
+            RunRoadReloadIfDue();
 
             if (!_bootstrapped)
             {
@@ -495,7 +565,10 @@ namespace Multiplayer
                     return;
                 }
 
-                int minutes = _settings.AutoUploadMinutes;
+                // Never more often than every five minutes. A save of a big modded city takes seconds and makes
+                // the game stutter while it runs; until tonight this timer never fired at all (a clock mix-up),
+                // so a setting of one minute that used to do nothing would now stall the host every minute.
+                int minutes = _settings.AutoUploadMinutes > 0 ? Math.Max(MinAutoUploadMinutes, _settings.AutoUploadMinutes) : 0;
                 if (minutes > 0 && _loadedRevision != 0 && _lastUploadMs >= 0 && nowMs - _lastUploadMs > minutes * 60000L)
                 {
                     StartUpload(nowMs, "periodic backup");
@@ -584,11 +657,13 @@ namespace Multiplayer
                 ILocalAssetDatabase database = AssetDatabase.user;
                 AssetDataPath path = SaveHelpers.GetAssetDataPath<SaveGameMetadata>(database, saveName);
 
-                if (database.Exists<PackageAsset>(path, out PackageAsset previous))
-                {
-                    database.DeleteAsset(previous);
-                }
-
+                // Save straight over the existing slot, exactly as the game's own Save and Quick Save do
+                // (MenuUISystem.SaveGame and QuickSave never delete first). The slot is usually the very save
+                // this city was loaded from, and deleting it first pulled that package out from under the
+                // running game while it still held its data file open: the save then failed with "file in
+                // use" part way through and left the serializer broken, which surfaced as a
+                // NullReferenceException in SerializerSystem / EntityManager.HighestEntityIndex. Both reported
+                // crashes during a save to the server were this.
                 await GameManager.instance.Save(saveName, info, database, (ScreenCaptureHelper.AsyncRequest)null);
 
                 if (!database.Exists<PackageAsset>(path, out PackageAsset package))
@@ -741,6 +816,9 @@ namespace Multiplayer
                 }
 
                 _awaitingLoadRevision = snapshot.Info.Revision;
+                _loadedSaveInfo = info;
+                RoadReloadDone = false;
+                ReloadingSameSave = false;
                 _note("Loading " + (string.IsNullOrEmpty(info.cityName) ? saveName : info.cityName) + " (revision " + snapshot.Info.Revision + ")...");
                 LoadThroughMenu(info);
             }
@@ -793,8 +871,9 @@ namespace Multiplayer
                 ResyncPending = false;
                 _resyncSinceMs = -1;
                 SyncModalText = string.Empty;
-                // The city that just loaded already contains everything held during the wait.
-                ReleaseHeldBuilds(true);
+                // A newer city that just loaded already contains everything held during the wait; a reload of the
+                // same save for Road Builder does not, so those are replayed instead.
+                ReleaseHeldBuilds(!ReloadingSameSave);
                 _note("Now playing the shared city, revision " + _loadedRevision);
             }
             else
@@ -806,6 +885,7 @@ namespace Multiplayer
             }
 
             _awaitingLoadRevision = 0;
+            ReloadingSameSave = false;
             Idle();
         }
 

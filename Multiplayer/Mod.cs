@@ -117,6 +117,8 @@ namespace Multiplayer
             updateSystem.UpdateAt<Sync.ModDataSyncSystem>(SystemUpdatePhase.UIUpdate);
             updateSystem.UpdateAt<Sync.TrafficLaneSyncSystem>(SystemUpdatePhase.UIUpdate);
             updateSystem.UpdateAt<Sync.RoadConfigSyncSystem>(SystemUpdatePhase.UIUpdate);
+            // Only its load hooks do anything; it exists so a shared city with new Road Builder roads reloads by itself.
+            updateSystem.UpdateAt<Sync.RoadBuilderLoadSystem>(SystemUpdatePhase.UIUpdate);
 
             // Main-menu entry and Join / Host screens (Multiplayer.mjs next to this DLL talks to these bindings).
             updateSystem.UpdateAt<MultiplayerUISystem>(SystemUpdatePhase.UIUpdate);
