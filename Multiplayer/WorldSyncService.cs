@@ -50,6 +50,10 @@ namespace Multiplayer
         private long _lastAskedUploadMs = -1;
         private const long AskedUploadMinGapMs = 30000;
 
+        /// <summary>A resync that never arrives must not silence this game forever; see <see cref="ResyncWaitLimitMs"/>.</summary>
+        private const long ResyncWaitLimitMs = 120000;
+        private long _resyncSinceMs = -1;
+
         public void RequestResync()
         {
             if (_session.IsLeader || ResyncPending)
@@ -58,6 +62,28 @@ namespace Multiplayer
             }
 
             ResyncPending = true;
+            _resyncSinceMs = NowMs();
+            RefreshStatus();
+        }
+
+        /// <summary>
+        /// While a resync is pending this game throws away every build the others send, because a fresh save
+        /// is supposed to be on its way. If that save never comes (nobody is in a city to make it, the leader
+        /// left, an upload failed), the game would go on silently discarding builds for the rest of the
+        /// session and drift further with every one. After two minutes, give up waiting and start replaying
+        /// again: a city that is a little out of step is better than one that stopped listening.
+        /// </summary>
+        private void ExpireResync(long nowMs)
+        {
+            if (!ResyncPending || _resyncSinceMs < 0 || nowMs - _resyncSinceMs < ResyncWaitLimitMs)
+            {
+                return;
+            }
+
+            ResyncPending = false;
+            _resyncSinceMs = -1;
+            SyncModalText = string.Empty;
+            _note("No fresh save arrived within two minutes; carrying on with the city as it is");
             RefreshStatus();
         }
 
@@ -131,6 +157,7 @@ namespace Multiplayer
 
                     SyncModalText = "Loading the shared city, revision " + command.Revision + ".";
                     ResyncPending = true;
+                    _resyncSinceMs = nowMs;
                     _nextAttemptMs = 0;
                     break;
 
@@ -323,6 +350,11 @@ namespace Multiplayer
 
         public void Update(long nowMs)
         {
+            // Callbacks that fire outside Update (an upload finishing, a load completing) stamp their time
+            // from here, so that every stamp and every comparison uses one clock.
+            _lastUpdateMs = nowMs;
+            ExpireResync(nowMs);
+
             if (!_bootstrapped)
             {
                 _bootstrapped = true;
@@ -735,6 +767,7 @@ namespace Multiplayer
                 _loadedRevision = _awaitingLoadRevision;
                 _lastUploadMs = NowMs();
                 ResyncPending = false;
+                _resyncSinceMs = -1;
                 SyncModalText = string.Empty;
                 _note("Now playing the shared city, revision " + _loadedRevision);
             }
@@ -824,6 +857,7 @@ namespace Multiplayer
                 HostChoicePending = false;
                 _hostChoiceAsked = false;
                 ResyncPending = false;
+                _resyncSinceMs = -1;
                 _lastAskedUploadMs = -1;
                 _freshSaveAskedMs = -1;
                 _forcedSyncWaiting = false;
@@ -891,9 +925,18 @@ namespace Multiplayer
             StatusLine = builder.ToString();
         }
 
-        private static long NowMs()
+        /// <summary>
+        /// The clock everything in this class is compared against: the same one <see cref="Update"/> is driven
+        /// with (MultiplayerService's stopwatch, counting from mod load). It used to be Environment.TickCount,
+        /// which counts from when the PC booted, so stamps written here were millions of milliseconds ahead of
+        /// the "now" they were later compared to. Every such comparison was false forever, which silently
+        /// switched off the periodic save to the server AND the forced group sync.
+        /// </summary>
+        private long NowMs()
         {
-            return Environment.TickCount;
+            return _lastUpdateMs;
         }
+
+        private long _lastUpdateMs;
     }
 }

@@ -7,6 +7,7 @@ using Game.Common;
 using Game.Input;
 using Game.Notifications;
 using Game.Prefabs;
+using Game.SceneFlow;
 using Game.Tools;
 using Multiplayer.Core.Build;
 using Unity.Entities;
@@ -94,6 +95,9 @@ namespace Multiplayer.Sync
 
             /// <summary>Times this command was held back because a prefab it needs has not arrived yet (a custom road, say).</summary>
             public int Waits;
+
+            /// <summary>Times this command was put back because nothing here could be recreated from it yet.</summary>
+            public int AnchorWaits;
         }
 
         /// <summary>How often, and how many times, a command waits for a prefab that another mod still has to create here.</summary>
@@ -101,6 +105,16 @@ namespace Multiplayer.Sync
         private const int PrefabWaitLimit = 10;
         private int m_PrefabWaitUntilFrame;
         private int m_FrameCount;
+
+        /// <summary>
+        /// How long a build waits for the thing it attaches to before it is given up on: about half a second
+        /// between tries, twenty tries, so roughly ten seconds. Long enough for the build that creates the
+        /// anchor to arrive and land, short enough that a genuinely impossible build is reported while the
+        /// builder still remembers making it.
+        /// </summary>
+        private const int AnchorRetryFrames = 30;
+        private const int AnchorRetryLimit = 20;
+        private int m_AnchorRetryUntilFrame;
 
         public void Enqueue(BuildCommand command, int fromPlayer, bool captureAnyway = false)
         {
@@ -163,6 +177,27 @@ namespace Multiplayer.Sync
                 return;
             }
 
+            // Every other sync system stands down while the game is loading; this one did not, and that is
+            // where the OverlapExisting errors came from. A city that is loading is about to be replaced by
+            // the shared save, which already contains everything queued here, so replaying the queue into it
+            // afterwards builds all of it a second time on top of itself. Drop the queue and start clean.
+            GameManager manager = GameManager.instance;
+            if (manager == null || manager.gameMode != GameMode.Game || manager.isGameLoading)
+            {
+                if (m_Queue.Count > 0)
+                {
+                    Mod.log.Info("Dropping " + m_Queue.Count + " queued build(s): the city is being replaced and the save already holds them");
+                    m_Queue.Clear();
+                }
+
+                m_Injected.Clear();
+                m_Phase = Phase.Idle;
+                m_Current = null;
+                m_SavedTool = null;
+                m_SavedPrefab = null;
+                return;
+            }
+
             m_FrameCount++;
             Step();
             SwallowBorrowedClick();
@@ -192,6 +227,13 @@ namespace Multiplayer.Sync
                     }
 
                     if (m_FrameCount < m_PrefabWaitUntilFrame)
+                    {
+                        return;
+                    }
+
+                    // A build that had nothing to attach to went to the back of the queue. If it is all that is
+                    // left, pause before trying it again rather than burning every frame on it.
+                    if (m_Queue.Count == 1 && m_Queue[0].AnchorWaits > 0 && m_FrameCount < m_AnchorRetryUntilFrame)
                     {
                         return;
                     }
@@ -506,7 +548,30 @@ namespace Multiplayer.Sync
 
             if (m_InjectedCount == 0)
             {
-                Mod.log.Warn("Replay of " + m_Current.Command + " skipped: nothing could be recreated here");
+                // Nothing here could be recreated yet. The usual reason is that the thing this build attaches
+                // to is a build of its own that has not landed on this PC yet, so the answer is to wait rather
+                // than to throw the build away: dropping it is what starts a cascade, because everything the
+                // other player builds on top of it fails too. The command goes back on the queue with a
+                // deadline and only counts as a failure once that runs out.
+                if (m_Current.AnchorWaits < AnchorRetryLimit)
+                {
+                    m_Current.AnchorWaits++;
+                    if (m_Current.AnchorWaits == 1)
+                    {
+                        Mod.log.Info("Replay of " + m_Current.Command + " waits: nothing to attach to here yet" + (problems.Length > 0 ? " (" + problems + ")" : ""));
+                    }
+
+                    // To the back of the queue, not the front: whatever this build needs is most likely another
+                    // build still on its way, so everything behind it should go first rather than be stalled.
+                    m_Queue.Add(m_Current);
+                    m_AnchorRetryUntilFrame = m_FrameCount + AnchorRetryFrames;
+                    m_Injected.Clear();
+                    m_Phase = Phase.Idle;
+                    m_Current = null;
+                    return;
+                }
+
+                Mod.log.Warn("Replay of " + m_Current.Command + " skipped after " + AnchorRetryLimit + " tries: nothing could be recreated here");
                 NoteFailure();
                 m_Failed++;
                 Report(false, "nothing could be recreated here" + (problems.Length > 0 ? ": " + problems : ""));
@@ -588,6 +653,12 @@ namespace Multiplayer.Sync
         }
 
         public bool IsBorrowingTool => m_SavedTool != null;
+
+        /// <summary>
+        /// True only while the borrowed selection tool is the one actually running. If the player picked a
+        /// tool of their own during a borrow, this goes false again and their builds are captured normally.
+        /// </summary>
+        public bool IsStandingInForPlayer => m_SavedTool != null && m_ToolSystem.activeTool == m_DefaultTool;
 
         /// <summary>
         /// Makes <paramref name="tool"/> the running tool without the tool-changed event. ToolUpdate still

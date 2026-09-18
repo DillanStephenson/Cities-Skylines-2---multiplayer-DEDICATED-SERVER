@@ -36,8 +36,14 @@ namespace Multiplayer.Sync
         private const float LaneTolerance = 1.5f;
         // Height only breaks ties (an overpass above a road): the game re-samples terrain heights when it
         // builds, and a save loaded on two PCs can legitimately differ by many metres on slopes.
-        private const float HeightTolerance = 100f;
-        private const float HeightWeight = 0.02f;
+        /// <summary>
+        /// How far apart in height two things may be and still be considered the same thing. This used to be
+        /// 100 m with a 0.02-per-metre penalty, which meant height could never rule a candidate out: a tunnel
+        /// sixty metres below an overpass was a legal match and could win. Roads are re-derived on each PC and
+        /// can sit slightly differently, so it stays generous, but not generous enough to cross a bridge deck.
+        /// </summary>
+        private const float HeightTolerance = 14f;
+        private const float HeightWeight = 0.35f;
         private const int EdgeSamples = 24;
 
         private readonly EntityManager _entities;
@@ -65,10 +71,20 @@ namespace Multiplayer.Sync
                 All = new[] { ComponentType.ReadOnly<Edge>(), ComponentType.ReadOnly<Curve>(), ComponentType.ReadOnly<PrefabRef>() },
                 None = new[] { ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<Deleted>() },
             });
+            // Only things that stand still. Every vehicle, citizen and animal also carries a transform, and
+            // their positions are different on every PC because each game simulates its own traffic, so they
+            // were legal candidates for "the object at this point" and could silently win the match.
             _objects = _entities.CreateEntityQuery(new EntityQueryDesc
             {
                 All = new[] { ComponentType.ReadOnly<ObjectTransform>(), ComponentType.ReadOnly<PrefabRef>() },
-                None = new[] { ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<Deleted>() },
+                None = new[]
+                {
+                    ComponentType.ReadOnly<Temp>(),
+                    ComponentType.ReadOnly<Deleted>(),
+                    ComponentType.ReadOnly<Game.Objects.Moving>(),
+                    ComponentType.ReadOnly<Game.Creatures.Creature>(),
+                    ComponentType.ReadOnly<Game.Vehicles.Vehicle>(),
+                },
             });
             _areas = _entities.CreateEntityQuery(new EntityQueryDesc
             {

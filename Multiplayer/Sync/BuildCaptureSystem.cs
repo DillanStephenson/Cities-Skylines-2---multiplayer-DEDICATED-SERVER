@@ -47,10 +47,13 @@ namespace Multiplayer.Sync
                 return;
             }
 
-            if (m_Replay != null && m_Replay.IsBorrowingTool && !SyncGuard.CaptureAnyway)
+            // The selection tool stands in for the player's while another player's build lands, so nothing
+            // applied through it is the player's own. Only skip while it is actually the active tool: the
+            // borrow is a latch that can stay set for many frames, and if the player picks a tool of their
+            // own during it, what they then build IS theirs and must still go out. Anything the replay itself
+            // injected is filtered by OwnsDefinition below.
+            if (m_Replay != null && m_Replay.IsStandingInForPlayer && !SyncGuard.CaptureAnyway)
             {
-                // The selection tool stands in for the player's while another player's build lands: nothing
-                // applied in these frames is the player's own.
                 return;
             }
 

@@ -55,7 +55,7 @@ Early access: play with people you know, keep your own saves, and report problem
 	<!--Link to the forum post where the mod can be discussed-->
 	<ForumLink Value="" />
 	<!--Version of the mod-->
-	<ModVersion Value="0.3.3" />
+	<ModVersion Value="0.3.4" />
 	<!--Recommended version of the base game to use the mod-->
 	<GameVersion Value="1.6.*" />
 	<!--Dependency for the mod, can be set multiple times-->
@@ -64,6 +64,7 @@ Early access: play with people you know, keep your own saves, and report problem
 	<RequiredDLC Value="" />
 	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
 	<ChangeLog>
+0.3.4: The big one for desync. Three faults were switching whole features off silently. Saving to the server on a timer and "Sync everyone every N minutes" never ran once: they compared two different clocks, so the timer never came due. Builds that arrived while your game was loading the shared city were replayed into it afterwards, building everything a second time on top of itself, which is where the overlap errors came from. And a game waiting for a fresh save that never came would throw away every build for the rest of the session; it now gives up after two minutes and carries on. Also: a build that cannot find what it attaches to is retried for ten seconds instead of dropped, so one missing road no longer takes everything built on it with it; matching a building can no longer pick a passing car or a pedestrian; and something sixty metres below is no longer a valid match for something above it. Fixes a fault in 0.3.3 where your own builds were not sent if you picked a tool while another player's build was landing.
 0.3.3: Joining a city others are already playing asks them for a fresh save first and fetches that (it waits up to a minute), instead of the last upload, so nothing built since is missing on your side. "Reload when someone else saves" is gone: a plain save no longer makes the others reload, which threw away everything built after that save started; only the group sync and a drift resync reload a running game. Another player's build never takes your tool while you hold the mouse button (a road being dragged, zones being painted), and a click during the brief moment the selection tool stands in does nothing instead of selecting something; nothing another player built can go back out as yours.
 0.3.2: Fixes the "+25 XP Electricity network online" (and population bonus) popping up every few seconds on everyone but the host: sharing the host's XP wiped the game's record of bonuses already paid, so it paid them again. Other players' builds no longer make your toolbar and tool options flash: the short switch to the selection tool while their build lands is now invisible to the UI. Saves to the server go through the game's own save queue; saving outside it could collide with the game's autosave and throw a null reference in the serializer, which is what one player hit.
 0.3.1: Forced group sync. Options > Multiplayer > "Sync everyone every (minutes)" on the host: every so many minutes everyone stops behind a Syncing world box, the host's city goes up to the server and the others load it. The in-game panel has "Sync everyone now" for the host as well.
