@@ -249,7 +249,8 @@
   position: absolute;
   z-index: 880;
   right: 24rem;
-  bottom: 48rem;
+  // Clear of the bottom bar, continuing the column of round buttons already on the right-hand side.
+  bottom: 96rem;
   display: flex;
   flex-direction: column;
   align-items: center;
