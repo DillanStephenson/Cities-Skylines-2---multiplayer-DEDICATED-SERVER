@@ -62,6 +62,7 @@ namespace Multiplayer.Sync
                 return;
             }
 
+            bool touchesSpecialisedArea = false;
             var command = new BuildCommand { Sequence = ++m_Sequence, ToolId = m_ToolSystem.activeTool != null ? m_ToolSystem.activeTool.toolID : "?" };
             int skippedSelect = 0;
             using (NativeArray<Entity> definitions = m_DefinitionQuery.ToEntityArray(Allocator.Temp))
@@ -71,6 +72,11 @@ namespace Multiplayer.Sync
                     try
                     {
                         CreationDefinition creation = EntityManager.GetComponentData<CreationDefinition>(definitions[i]);
+                        if (creation.m_Prefab != Entity.Null && EntityManager.HasComponent<ExtractorAreaData>(creation.m_Prefab))
+                        {
+                            touchesSpecialisedArea = true;
+                        }
+
                         // Select: the default tool picking an entity. Permanent: the simulation spawning sub-parts
                         // (driveways, building sub-nets) through the same pipeline; those happen on every game by themselves.
                         if ((creation.m_Flags & (CreationFlags.Select | CreationFlags.Permanent)) != 0)
@@ -100,7 +106,7 @@ namespace Multiplayer.Sync
                 return;
             }
 
-            string hold = ReplayRules.HoldReason(command);
+            string hold = ReplayRules.HoldReason(command, touchesSpecialisedArea);
             if (hold != null)
             {
                 // Held back here as well as on the receiving side, so an older game on the other end is safe too.

@@ -170,7 +170,13 @@ namespace Multiplayer
         }
 
         private readonly List<long> _replayFailures = new List<long>();
-        private const int ResyncAfterFailures = 3;
+        /// <summary>
+        /// How many builds must fail here within <see cref="ResyncWindowMs"/> before this game concludes it has
+        /// drifted and asks for a fresh save. Raised from three when partial validation failures started
+        /// counting: those are the truest evidence of drift but they also occur singly in normal play, and the
+        /// only cure on offer is a full reload, which costs the player whatever they have built since.
+        /// </summary>
+        private const int ResyncAfterFailures = 6;
         private const long ResyncWindowMs = 120000;
         public const string SaveNowKind = "savenow";
 

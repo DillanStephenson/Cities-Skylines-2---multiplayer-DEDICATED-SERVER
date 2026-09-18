@@ -50,6 +50,9 @@ namespace Multiplayer.Sync
         private readonly List<CityStateCommand> m_Incoming = new List<CityStateCommand>();
         private bool m_Primed;
         private bool m_ResyncAfterApply;
+
+        /// <summary>Kinds of value ("money", "tax", "policy"...) that arrived from someone else and must be re-baselined.</summary>
+        private readonly HashSet<string> m_ResyncKinds = new HashSet<string>();
         private int m_Frame;
         private int m_MoneyFrame;
         private int m_Sent;
@@ -116,13 +119,12 @@ namespace Multiplayer.Sync
                 return;
             }
 
-            if (!m_Primed || m_ResyncAfterApply)
+            if (!m_Primed)
             {
-                // First look, or right after applying someone else's change: adopt the current values as synced.
-                // A remote change can move derived values too (an area tax rate sets every level under it), and
-                // those must not be mistaken for local edits.
+                // First look: adopt everything as already synced.
                 m_Primed = true;
                 m_ResyncAfterApply = false;
+                m_ResyncKinds.Clear();
                 m_Last.Clear();
                 foreach (KeyValuePair<string, float> pair in current)
                 {
@@ -130,6 +132,26 @@ namespace Multiplayer.Sync
                 }
 
                 return;
+            }
+
+            if (m_ResyncAfterApply)
+            {
+                // Right after applying someone else's change: adopt the current values of the kinds that
+                // changed, because a remote change moves derived values too (an area tax rate sets every
+                // level under it) and those must not be mistaken for local edits. Everything else keeps its
+                // old baseline, so a change the player made here is still noticed and still sent.
+                m_ResyncAfterApply = false;
+                foreach (KeyValuePair<string, float> pair in current)
+                {
+                    int colon = pair.Key.IndexOf(':');
+                    string kind = colon > 0 ? pair.Key.Substring(0, colon) : pair.Key;
+                    if (m_ResyncKinds.Contains(kind))
+                    {
+                        m_Last[pair.Key] = pair.Value;
+                    }
+                }
+
+                m_ResyncKinds.Clear();
             }
 
             bool snapshotDue = service.Session.IsOwner && m_Frame % SnapshotIntervalFrames == 0;
@@ -300,6 +322,16 @@ namespace Multiplayer.Sync
                 if (applied > 0)
                 {
                     m_ResyncAfterApply = true;
+                }
+
+                // Only the kinds of value that were actually applied get re-baselined wholesale. The leader
+                // stamps money, XP and development points onto everyone every five seconds; re-baselining
+                // everything each time swallowed whatever the player had changed in between, so a tax or a
+                // policy set here was silently never sent to anyone.
+                foreach (StateEntry entry in command.Entries)
+                {
+                    int colon = entry.Key.IndexOf(':');
+                    m_ResyncKinds.Add(colon > 0 ? entry.Key.Substring(0, colon) : entry.Key);
                 }
 
                 if (applied > 0 || !command.FullSnapshot)

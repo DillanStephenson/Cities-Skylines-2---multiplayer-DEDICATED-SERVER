@@ -376,7 +376,39 @@ namespace Multiplayer.Sync
                 return why ?? "junction not found here";
             }
 
-            // Whatever this junction had is replaced wholesale, data entities included (Traffic marks them Deleted too).
+            // An empty set of groups is not the same as a removal. Traffic creates the buffer on a junction
+            // before it fills it, so a scan can catch that empty moment and send it; treating that as "clear
+            // this junction" wiped the other player's real settings. Only an explicit removal removes.
+            if (!command.Remove && command.Groups.Count == 0)
+            {
+                return null;
+            }
+
+            // Check every reference resolves BEFORE touching anything. This used to delete the junction's
+            // data entities first and then bail out halfway through resolving, which left the junction
+            // wrecked here and, because the next scan saw the wreckage as a change, broadcast it to everyone.
+            if (!command.Remove)
+            {
+                foreach (LaneGroupData check in command.Groups)
+                {
+                    if (m_Resolver.Resolve(check.Edge, out why) == Entity.Null)
+                    {
+                        return "edge " + check.Edge + " not found here" + (why != null ? " (" + why + ")" : "");
+                    }
+
+                    foreach (LaneConnectionData connection in check.Connections)
+                    {
+                        if (m_Resolver.Resolve(connection.Source, out why) == Entity.Null
+                            || m_Resolver.Resolve(connection.Target, out why) == Entity.Null)
+                        {
+                            return "a connection's edge is not found here" + (why != null ? " (" + why + ")" : "");
+                        }
+                    }
+                }
+            }
+
+            // Everything resolves, so the junction can safely be replaced wholesale, data entities included
+            // (Traffic marks them Deleted too).
             if (m_Groups.Has(node))
             {
                 byte[] old = m_Groups.Read(node);
@@ -392,7 +424,7 @@ namespace Multiplayer.Sync
                 }
             }
 
-            if (command.Remove || command.Groups.Count == 0)
+            if (command.Remove)
             {
                 if (m_Groups.Has(node))
                 {

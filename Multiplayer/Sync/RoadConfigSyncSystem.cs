@@ -29,7 +29,24 @@ namespace Multiplayer.Sync
         private const string EncodeOptionsType = "Colossal.Json.EncodeOptions";
 
         private readonly List<ModConfigCommand> m_Incoming = new List<ModConfigCommand>();
-        private readonly HashSet<string> m_Known = new HashSet<string>(StringComparer.Ordinal);
+        /// <summary>Road id to a hash of the JSON last seen for it. Road Builder lets a road be edited in
+        /// place, keeping its id, so tracking ids alone meant an edited road was never sent again and the two
+        /// PCs went on building with silently different geometry under the same name.</summary>
+        private readonly Dictionary<string, int> m_Known = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        private static int HashJson(string json)
+        {
+            unchecked
+            {
+                int hash = 17;
+                for (int i = 0; i < json.Length; i++)
+                {
+                    hash = hash * 31 + json[i];
+                }
+
+                return hash;
+            }
+        }
         private ComponentSystemBase m_RoadBuilder;
         private PropertyInfo m_Configurations;
         private PropertyInfo m_ConfigOfPrefab;
@@ -178,12 +195,6 @@ namespace Multiplayer.Sync
                     continue;
                 }
 
-                bool isNew = m_Known.Add(id);
-                if (!isNew && !sendEverything)
-                {
-                    continue;
-                }
-
                 object config = entry.Value != null ? m_ConfigOfPrefab.GetValue(entry.Value, null) : null;
                 if (config == null)
                 {
@@ -202,6 +213,15 @@ namespace Multiplayer.Sync
                 }
 
                 if (string.IsNullOrEmpty(json) || json.Length > ModConfigCommand.MaxJsonLength)
+                {
+                    continue;
+                }
+
+                // Send when the road is new here, or when its shape has changed since it was last sent.
+                int hash = HashJson(json);
+                bool changed = !m_Known.TryGetValue(id, out int lastHash) || lastHash != hash;
+                m_Known[id] = hash;
+                if (!changed && !sendEverything)
                 {
                     continue;
                 }
@@ -226,9 +246,18 @@ namespace Multiplayer.Sync
                     continue;
                 }
 
-                if (m_Known.Contains(command.Id) || (configurations != null && configurations.Contains(command.Id)))
+                // Skip only when this exact road, with this exact shape, is already here. An edited road keeps
+                // its id, so comparing ids alone let an edit through unapplied.
+                int incoming = HashJson(command.Json ?? string.Empty);
+                if (m_Known.TryGetValue(command.Id, out int mine) && mine == incoming)
                 {
-                    m_Known.Add(command.Id);
+                    continue;
+                }
+
+                if (!m_Known.ContainsKey(command.Id) && configurations != null && configurations.Contains(command.Id))
+                {
+                    // Present here already but never hashed (it was made locally): adopt it without rebuilding.
+                    m_Known[command.Id] = incoming;
                     continue;
                 }
 
@@ -242,7 +271,7 @@ namespace Multiplayer.Sync
                     }
 
                     object added = m_AddPrefab.Invoke(m_RoadBuilder, new[] { config, (object)false });
-                    m_Known.Add(command.Id);
+                    m_Known[command.Id] = incoming;
                     if (added == null)
                     {
                         Mod.log.Warn("Road config sync: Road Builder did not add " + command + " (see its log)");

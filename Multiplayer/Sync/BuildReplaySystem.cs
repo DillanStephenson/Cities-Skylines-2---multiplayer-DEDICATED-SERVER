@@ -291,6 +291,13 @@ namespace Multiplayer.Sync
                         {
                             Mod.log.Warn("Replay of " + m_Current.Command + ": " + errors + " of " + temps + " temp entities failed validation here; those parts will not be built" + details);
                             m_Problem = errors + " of " + temps + " parts failed validation here" + details;
+
+                            // This is the strongest evidence of drift there is. The other player's build is
+                            // valid on their PC and the game here refuses part of it, which means the two
+                            // cities no longer agree about what is on the ground. It used to be logged and
+                            // then applied in part, without ever counting as a failure, so the drift detector
+                            // never saw the one signal that actually means "these cities have diverged".
+                            NoteFailure();
                         }
                         else
                         {

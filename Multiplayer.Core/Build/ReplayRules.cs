@@ -32,10 +32,19 @@ namespace Multiplayer.Core.Build
             return false;
         }
 
-        /// <summary>Why a command is held back, or null when it replays normally.</summary>
-        public static string HoldReason(BuildCommand command)
+        /// <summary>
+        /// Why a command is held back, or null when it replays normally.
+        /// <paramref name="touchesSpecialisedArea"/> is supplied by the caller, which can see the game's prefab
+        /// data: an Area Tool command that only moves or adds a node of an existing farm or oil field carries no
+        /// Object or Course definition, so the shape of the command alone cannot tell it apart from a district.
+        /// Those edits used to go out while the area's creation was held back, so on the other PC they looked for
+        /// an area that had never been built there and failed forever.
+        /// </summary>
+        public static string HoldReason(BuildCommand command, bool touchesSpecialisedArea = false)
         {
-            return IsSpecialisedArea(command) ? "specialised industry areas are not replayed yet; they arrive with the next save" : null;
+            return IsSpecialisedArea(command) || (touchesSpecialisedArea && command != null && command.ToolId == AreaTool)
+                ? "specialised industry areas are not replayed yet; they arrive with the next save"
+                : null;
         }
     }
 }
