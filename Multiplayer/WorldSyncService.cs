@@ -50,6 +50,25 @@ namespace Multiplayer
         private long _lastAskedUploadMs = -1;
         private const long AskedUploadMinGapMs = 30000;
 
+        /// <summary>
+        /// Lets go of the builds that arrived while replays were held. They are discarded when a fresh save has
+        /// just loaded (it already contains them) and replayed when the hold simply ended.
+        /// </summary>
+        private static void ReleaseHeldBuilds(bool alreadyInTheSave)
+        {
+            try
+            {
+                World world = World.DefaultGameObjectInjectionWorld;
+                world?.GetExistingSystemManaged<Sync.BuildReplaySystem>()?.ReleaseHeld(alreadyInTheSave);
+            }
+            catch (Exception ex)
+            {
+                _staticLog?.Warn("Could not release held builds: " + ex.Message);
+            }
+        }
+
+        private static ILog _staticLog;
+
         /// <summary>A resync that never arrives must not silence this game forever; see <see cref="ResyncWaitLimitMs"/>.</summary>
         private const long ResyncWaitLimitMs = 120000;
         private long _resyncSinceMs = -1;
@@ -83,6 +102,7 @@ namespace Multiplayer
             ResyncPending = false;
             _resyncSinceMs = -1;
             SyncModalText = string.Empty;
+            ReleaseHeldBuilds(false);
             _note("No fresh save arrived within two minutes; carrying on with the city as it is");
             RefreshStatus();
         }
@@ -151,6 +171,7 @@ namespace Multiplayer
                     if (command.Revision != 0 && command.Revision == _loadedRevision)
                     {
                         SyncModalText = string.Empty;
+                        ReleaseHeldBuilds(false);
                         _note("Syncing world: already on revision " + command.Revision);
                         break;
                     }
@@ -164,6 +185,7 @@ namespace Multiplayer
                 case WorldSyncPhase.Cancel:
                     _forcedSyncWaiting = false;
                     SyncModalText = string.Empty;
+                    ReleaseHeldBuilds(false);
                     _note("Syncing world: the host's save did not happen; carrying on");
                     break;
             }
@@ -177,6 +199,7 @@ namespace Multiplayer
             {
                 _forcedSyncWaiting = false;
                 SyncModalText = string.Empty;
+                ReleaseHeldBuilds(false);
                 _note("Syncing world: no save arrived from the host; carrying on");
             }
 
@@ -327,6 +350,7 @@ namespace Multiplayer
             _session = session ?? throw new ArgumentNullException(nameof(session));
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _log = log ?? throw new ArgumentNullException(nameof(log));
+            _staticLog = _log;
             _note = note ?? (_ => { });
 
             _session.StateChanged += OnStateChanged;
@@ -769,11 +793,15 @@ namespace Multiplayer
                 ResyncPending = false;
                 _resyncSinceMs = -1;
                 SyncModalText = string.Empty;
+                // The city that just loaded already contains everything held during the wait.
+                ReleaseHeldBuilds(true);
                 _note("Now playing the shared city, revision " + _loadedRevision);
             }
             else
             {
                 SyncModalText = string.Empty;
+                // Nothing loaded, so what was held is still wanted here.
+                ReleaseHeldBuilds(false);
                 _note("The shared city did not load (game went to " + mode + ")");
             }
 

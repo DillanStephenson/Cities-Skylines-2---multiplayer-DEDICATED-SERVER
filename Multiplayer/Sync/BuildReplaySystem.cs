@@ -103,7 +103,7 @@ namespace Multiplayer.Sync
         /// <summary>One line the player or the log can be shown: what happened to every build that arrived.</summary>
         public string Ledger()
         {
-            int accounted = m_Replayed + m_BatchedTotal + m_Skipped;
+            int accounted = m_Replayed + m_BatchedTotal + m_Skipped + m_Held.Count;
             return "received " + m_Received
                 + ", replayed " + m_Replayed
                 + ", batched " + m_BatchedTotal
@@ -111,6 +111,8 @@ namespace Multiplayer.Sync
                 + ", retried " + m_Retried
                 + ", given up " + m_Skipped
                 + ", waiting " + m_Queue.Count
+                + (m_Held.Count > 0 ? ", held " + m_Held.Count : "")
+                + (m_Duplicates > 0 ? ", duplicates " + m_Duplicates : "")
                 + (accounted + m_Queue.Count == m_Received ? "" : " (UNACCOUNTED " + (m_Received - accounted - m_Queue.Count) + ")");
         }
         private readonly List<Entity> m_Injected = new List<Entity>();
@@ -155,16 +157,70 @@ namespace Multiplayer.Sync
 
         public void Enqueue(BuildCommand command, int fromPlayer, bool captureAnyway = false)
         {
-            MultiplayerService service = Mod.Service;
-            if (service != null && service.WorldSync.HoldReplays && !captureAnyway)
+            // The same build arriving twice must never be built twice. A re-send, a reconnect or a relay hiccup
+            // used to produce a second copy of a road on top of the first, which is a divergence this PC creates
+            // for itself and then reports as someone else's fault.
+            long key = ((long)fromPlayer << 32) | (uint)command.Sequence;
+            if (!captureAnyway && !m_Seen.Add(key))
             {
-                // This city has drifted and a fresh save is on its way; replaying into it now only makes it worse.
-                Mod.log.Info("Not replaying " + command + " from player " + fromPlayer + ": waiting for the fresh save");
+                m_Duplicates++;
+                Mod.log.Info("Ignoring " + command + " from player " + fromPlayer + ": already had it");
                 return;
             }
 
             m_Received++;
+
+            MultiplayerService service = Mod.Service;
+            if (service != null && service.WorldSync.HoldReplays && !captureAnyway)
+            {
+                // A fresh save is on its way and replaying into this city now only makes it worse. The command
+                // is kept, not destroyed: it used to be thrown away here, so anything built during a sync was
+                // lost for good on this PC even though the sync was supposed to protect it.
+                m_Held.Add(new QueuedBuild { Command = command, FromPlayer = fromPlayer, CaptureAnyway = captureAnyway });
+                if (m_Held.Count == 1)
+                {
+                    Mod.log.Info("Holding builds while a fresh save is on its way; they replay once it lands");
+                }
+
+                return;
+            }
+
             m_Queue.Add(new QueuedBuild { Command = command, FromPlayer = fromPlayer, CaptureAnyway = captureAnyway });
+        }
+
+        /// <summary>Builds that arrived while this city was waiting for a fresh save.</summary>
+        private readonly List<QueuedBuild> m_Held = new List<QueuedBuild>();
+
+        /// <summary>Every (player, sequence) already accepted, so the same build is never built twice.</summary>
+        private readonly HashSet<long> m_Seen = new HashSet<long>();
+
+        private int m_Duplicates;
+
+        public int DuplicateCount => m_Duplicates;
+
+        /// <summary>
+        /// The hold is over. Anything that arrived during it is released in arrival order, unless the fresh save
+        /// already contains it, which is the case whenever the city was actually reloaded.
+        /// </summary>
+        public void ReleaseHeld(bool alreadyInTheSave)
+        {
+            if (m_Held.Count == 0)
+            {
+                return;
+            }
+
+            if (alreadyInTheSave)
+            {
+                Mod.log.Info("Discarding " + m_Held.Count + " held build(s): the save that just loaded already has them");
+                m_Skipped += m_Held.Count;
+            }
+            else
+            {
+                Mod.log.Info("Releasing " + m_Held.Count + " held build(s) now the hold is over");
+                m_Queue.AddRange(m_Held);
+            }
+
+            m_Held.Clear();
         }
 
         /// <summary>A build from another player could not be recreated here: the service decides whether that is drift.</summary>
@@ -609,6 +665,7 @@ namespace Multiplayer.Sync
             m_InjectedCount = 0;
             m_Batched = 0;
             m_Problem = null;
+            m_BatchedWith.Clear();
             DiscardInjected();
             InjectDefinitions(m_Current.Command, problems);
 
@@ -619,6 +676,7 @@ namespace Multiplayer.Sync
                 QueuedBuild next = m_Queue[0];
                 m_Queue.RemoveAt(0);
                 InjectDefinitions(next.Command, problems);
+                m_BatchedWith.Add(next);
                 m_Batched++;
             }
 
@@ -668,8 +726,26 @@ namespace Multiplayer.Sync
         /// <summary>Tell the builder how their command fared here. Nothing goes back for our own (dev) commands.</summary>
         private void Report(bool ok, string message)
         {
+            if (m_Current != null)
+            {
+                ReportOne(m_Current, ok, message);
+            }
+
+            // Commands merged into this one are answered too. Only the leading command used to be reported, so
+            // in a long terrain drag the builder heard back about one stroke in five and had no way to know the
+            // rest had landed.
+            for (int i = 0; i < m_BatchedWith.Count; i++)
+            {
+                ReportOne(m_BatchedWith[i], ok, message);
+            }
+        }
+
+        private readonly List<QueuedBuild> m_BatchedWith = new List<QueuedBuild>();
+
+        private void ReportOne(QueuedBuild build, bool ok, string message)
+        {
             MultiplayerService service = Mod.Service;
-            if (service == null || m_Current == null || m_Current.FromPlayer == service.Session.LocalPlayerId)
+            if (service == null || build == null || build.FromPlayer == service.Session.LocalPlayerId)
             {
                 return;
             }
@@ -678,9 +754,9 @@ namespace Multiplayer.Sync
             {
                 service.SendBuildResult(new BuildResultCommand
                 {
-                    Sequence = m_Current.Command.Sequence,
-                    BuilderPlayerId = m_Current.FromPlayer,
-                    ToolId = m_Current.Command.ToolId,
+                    Sequence = build.Command.Sequence,
+                    BuilderPlayerId = build.FromPlayer,
+                    ToolId = build.Command.ToolId,
                     Ok = ok,
                     Message = message ?? string.Empty,
                 });
