@@ -334,21 +334,45 @@ namespace Multiplayer.Sync
                         string details = DescribeErrors(out bool blocking);
                         if (blocking)
                         {
-                            Mod.log.Warn("Replay of " + m_Current.Command + ": " + errors + " of " + temps + " temp entities failed validation here; those parts will not be built" + details);
-                            m_Problem = errors + " of " + temps + " parts failed validation here" + details;
+                            // The honest no. The game here refuses part of what the other player built, which
+                            // means the two cities no longer agree about what is on the ground. Building the
+                            // rest anyway left a half a road or a building without its approach, and that
+                            // wreckage is what every later build in the area then collided with: one refusal
+                            // turned into a cascade. Better to build none of it, say so, and let it be
+                            // repaired, than to manufacture a difference nobody can see.
+                            //
+                            // It gets one more go first: the pieces this build attaches to may simply not
+                            // have landed yet, and a second attempt a moment later usually finds them.
+                            if (m_Current.AnchorWaits < AnchorRetryLimit)
+                            {
+                                if (m_Current.AnchorWaits == 0)
+                                {
+                                    m_Retried++;
+                                    Mod.log.Info("Replay of " + m_Current.Command + " held: " + errors + " of " + temps + " parts are not valid here yet" + details);
+                                }
 
-                            // This is the strongest evidence of drift there is. The other player's build is
-                            // valid on their PC and the game here refuses part of it, which means the two
-                            // cities no longer agree about what is on the ground. It used to be logged and
-                            // then applied in part, without ever counting as a failure, so the drift detector
-                            // never saw the one signal that actually means "these cities have diverged".
+                                m_Current.AnchorWaits++;
+                                SetApplyMode(ApplyMode.Clear);
+                                m_Queue.Add(m_Current);
+                                m_AnchorRetryUntilFrame = m_FrameCount + AnchorRetryFrames;
+                                m_Injected.Clear();
+                                m_Phase = Phase.Idle;
+                                m_Current = null;
+                                return;
+                            }
+
+                            Mod.log.Warn("Replay of " + m_Current.Command + ": " + errors + " of " + temps + " parts are still not valid here; building none of it" + details);
                             m_Partial++;
+                            m_Skipped++;
+                            m_Failed++;
+                            SetApplyMode(ApplyMode.Clear);
+                            Report(false, errors + " of " + temps + " parts are not valid here, so none of it was built" + details);
                             NoteFailure();
+                            Finish();
+                            return;
                         }
-                        else
-                        {
-                            Mod.log.Info("Replay of " + m_Current.Command + ": " + errors + " of " + temps + " temp entities carry a warning here" + details);
-                        }
+
+                        Mod.log.Info("Replay of " + m_Current.Command + ": " + errors + " of " + temps + " temp entities carry a warning here" + details);
                     }
 
                     SyncGuard.IsReplaying = true;
