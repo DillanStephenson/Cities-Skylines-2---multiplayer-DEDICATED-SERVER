@@ -188,10 +188,36 @@
   display: flex;
   margin: 0;
   padding: 0;
+  // The game's right-hand column switches mouse input off for everything under it. Without this the button is
+  // drawn but never receives a click.
+  pointer-events: auto;
+}
+
+// The button in the game's right-hand column, dressed in the game's own right-menu styles. Mouse input is switched
+// on here as well, in case the game's styles ever stop doing it.
+.rightMenuItem {
+  position: relative;
+  pointer-events: auto;
+}
+
+.rightMenuButton {
+  pointer-events: auto;
+}
+
+.rightMenuDot {
+  position: absolute;
+  right: 2rem;
+  top: 2rem;
+  width: 9rem;
+  height: 9rem;
+  border-radius: 50%;
+  background-color: rgba(120, 220, 120, 1);
+  pointer-events: none;
 }
 
 .gameToggle {
   position: relative;
+  pointer-events: auto;
   width: 36rem;
   height: 36rem;
   margin: 0;

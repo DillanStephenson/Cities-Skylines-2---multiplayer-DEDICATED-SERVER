@@ -1,13 +1,29 @@
 import { useValue } from "cs2/api";
 import { useEffect, useState } from "react";
+import { getModule } from "cs2/modding";
 import { Button } from "cs2/ui";
 import * as b from "./bindings";
 import styles from "./multiplayer.module.scss";
 
-/** True while the button in the game's own bottom-right toolbar is on screen. */
+/** True while the button in the game's own right-hand column is on screen. */
 let toolbarButtonShown = false;
 
-/** The round Multiplayer button itself; a green dot shows while connected. */
+/**
+ * The game's own right-menu styles, the ones the Chirper and notification buttons use. Borrowing them makes the
+ * button sit and look exactly like its neighbours. The paths are internal to the game and can move in an update,
+ * so a missing one falls back to this mod's own look.
+ */
+const tryClasses = (path: string): Record<string, string> | null => {
+  try {
+    return getModule(path, "classes") || null;
+  } catch {
+    return null;
+  }
+};
+const rightMenuButton = tryClasses("game-ui/game/components/right-menu/right-menu-button.module.scss");
+const rightMenu = tryClasses("game-ui/game/components/right-menu/right-menu.module.scss");
+
+/** The round Multiplayer button in this mod's own look; a green dot shows while connected. */
 const ToggleButton = () => {
   const online = useValue(b.online$);
   const open = useValue(b.panelOpen$);
@@ -29,18 +45,49 @@ const ToggleButton = () => {
 };
 
 /**
- * The button in the game's bottom-right toolbar. The click is taken both through the game's onSelect and a
- * plain onClick, whichever the toolbar lets through; the C# side ignores the second of two toggles in the same
- * instant, so one click is always one toggle. It records that it is on screen, so the floating copy stays away.
+ * The button in the game's right-hand column. That column, and everything the game puts under it, has mouse
+ * input switched off; only the game's own buttons switch it back on, through their styles. This button used to
+ * carry only this mod's styles, so it was drawn but the game's hit test never landed on it: a real click at its
+ * centre went through into the city, which is why pressing it never opened the panel. It now wears the game's
+ * right-menu styles like the Chirper does, and switches mouse input on itself as well, in case those styles move.
+ * The click is taken both through the game's onSelect and a plain onClick, whichever arrives; the C# side ignores
+ * the second of two toggles in the same instant, so one click is always one toggle.
  */
 export const GameToolbarButton = () => {
+  const online = useValue(b.online$);
+  const open = useValue(b.panelOpen$);
   useEffect(() => {
     toolbarButtonShown = true;
     return () => {
       toolbarButtonShown = false;
     };
   }, []);
-  return <ToggleButton />;
+
+  if (!rightMenuButton) {
+    return <ToggleButton />;
+  }
+
+  return (
+    <div
+      className={(rightMenu ? rightMenu.item + " " : "") + styles.rightMenuItem}
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        b.togglePanel();
+      }}
+    >
+      <Button
+        theme={{ button: rightMenuButton.button, icon: rightMenuButton.icon }}
+        className={(rightMenuButton.toggleStates || "") + " " + styles.rightMenuButton}
+        selected={open}
+        onSelect={b.togglePanel}
+        tooltipLabel="Multiplayer"
+      >
+        <img src="Media/Glyphs/Passenger.svg" className={rightMenuButton.icon} />
+      </Button>
+      {online && <div className={styles.rightMenuDot} />}
+    </div>
+  );
 };
 
 /**
