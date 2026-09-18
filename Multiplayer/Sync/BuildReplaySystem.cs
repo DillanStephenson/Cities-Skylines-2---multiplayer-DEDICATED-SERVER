@@ -434,6 +434,15 @@ namespace Multiplayer.Sync
                         Mod.log.Info("Replay of " + m_Current.Command + ": " + errors + " of " + temps + " temp entities carry a warning here" + details);
                     }
 
+                    // The apply mode is read off whichever tool the game latched at the top of this frame, not
+                    // off the one we wrote to, so if the player's tool came back between injecting and now, the
+                    // apply silently does not happen. Make sure the stand-in tool is still the running one.
+                    if (m_ToolSystem.activeTool != m_DefaultTool)
+                    {
+                        SetActiveToolQuietly(m_DefaultTool);
+                        return;
+                    }
+
                     SyncGuard.IsReplaying = true;
                     SyncGuard.CaptureAnyway = m_Current.CaptureAnyway;
                     SetApplyMode(ApplyMode.Apply);
@@ -442,6 +451,27 @@ namespace Multiplayer.Sync
                 }
 
                 case Phase.Applied:
+                    // Applying consumes the temp entities. If they are still here, the apply did not happen,
+                    // and this used to be logged and reported to the builder as a success anyway: a build that
+                    // vanished was counted as landed, so the drift detector never saw it either.
+                    if (!m_TempQuery.IsEmptyIgnoreFilter && m_Current != null && m_Current.AnchorWaits < AnchorRetryLimit)
+                    {
+                        m_Current.AnchorWaits++;
+                        if (m_Current.AnchorWaits == 1)
+                        {
+                            m_Retried++;
+                            Mod.log.Info("Replay of " + m_Current.Command + ": the apply did not go through; trying again");
+                        }
+
+                        SetApplyMode(ApplyMode.Clear);
+                        m_Queue.Add(m_Current);
+                        m_AnchorRetryUntilFrame = m_FrameCount + AnchorRetryFrames;
+                        DiscardInjected();
+                        m_Phase = Phase.Idle;
+                        m_Current = null;
+                        return;
+                    }
+
                     m_Replayed++;
                     m_BatchedTotal += m_Batched;
                     Mod.log.Info("Replayed " + m_Current.Command + " from player " + m_Current.FromPlayer + " (" + m_InjectedCount + " definitions" + (m_Batched > 0 ? ", " + m_Batched + " more stroke command(s) with it" : "") + ")");
