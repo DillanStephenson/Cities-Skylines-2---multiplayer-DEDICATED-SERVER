@@ -24,3 +24,6 @@ Thumbs.db
 # Game post-processor state
 Multiplayer/Library/
 
+
+# Build output: the mod is deployed here, not into the game's Mods folder (the player runs the Paradox copy)
+.deploy/

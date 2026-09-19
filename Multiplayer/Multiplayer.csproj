@@ -13,6 +13,18 @@
 	<Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.props" />
 	<Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.targets" />
 
+	<!--
+	  Build into a folder inside this repository, never into the game's own Mods folder. The player runs the copy from
+	  Paradox Mods (their playset). A second copy in Mods\ makes the game load the mod twice: it runs the code of one
+	  copy with the interface of the other and marks the second "Mod failed to load". Publishing reads its content
+	  from this same folder, so nothing else changes. For a one-off local test in the game, override it:
+	    dotnet build Multiplayer/Multiplayer.csproj -p:LocalModsPath="%LOCALAPPDATA%Low\Colossal Order\Cities Skylines II\Mods"
+	  and remove that copy again afterwards.
+	-->
+	<PropertyGroup>
+		<LocalModsPath>$(MSBuildThisFileDirectory)..\.deploy</LocalModsPath>
+	</PropertyGroup>
+
 	<ItemGroup>
 		<Reference Include="Game">
 			<Private>false</Private>
